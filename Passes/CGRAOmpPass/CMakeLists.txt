@@ -21,49 +21,26 @@
 #    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #    SOFTWARE.
 #    
-#    File:          /Passes/CMakeLists.txt
+#    File:          /Passes/CGRAOmpPass/CMakeLists.txt
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
-#    Created Date:  26-08-2021 20:53:10
-#    Last Modified: 27-08-2021 14:17:54
+#    Created Date:  27-08-2021 14:16:34
+#    Last Modified: 27-08-2021 14:22:31
 #
+add_llvm_library( libCGRAOmpPass MODULE
+  ## append source file list here
+  CGRAOmpPass.cpp
+  CGRAModel.cpp
+  VerifyPass.cpp
+  CGRADataFlowGraph.cpp
 
-# set LLVM version
-if(NOT DEFINED LLVM_VERSION_MAJOR)
-  set(LLVM_VERSION_MAJOR 12)
-endif()
-if(NOT DEFINED LLVM_VERSION_MINOR)
-  set(LLVM_VERSION_MINOR 0)
-endif()
-if(NOT DEFINED LLVM_VERSION_PATCH)
-  set(LLVM_VERSION_PATCH 0)
-endif()
-if(NOT DEFINED LLVM_VERSION_SUFFIX)
-  set(LLVM_VERSION_SUFFIX "")
-endif()
+  DEPENDS
+  intrinsics_gen
 
-# get LLVM cmake dir
-set (LLVM_MIN_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
-execute_process(COMMAND llvm-config --cmakedir OUTPUT_VARIABLE LLVM_DIR)
+  PLUGIN_TOOL
+  opt
+  )
 
-find_package(LLVM ${LLVM_MIN_VERSION} REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-
-list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
-include(AddLLVM)
-
-include_directories(${LLVM_INCLUDE_DIRS})
-add_definitions(${LLVM_DEFINITIONS})
-
-# list of passes to be built
-set (LLVM_PASSLIB_LIST
-  CGRAOmpPass
-  OptionPlugin
-)
-
-message("${LLVM_PASSLIB_LIST}")
-# add for each lib
-foreach (PASSLIB IN LISTS LLVM_PASSLIB_LIST)
-  add_subdirectory(${PASSLIB})
-  message("add target library: ${PASSLIB}")
-endforeach()
+target_include_directories( libCGRAOmpPass
+  PRIVATE ${PROJECT_SOURCE_DIR}/include
+  )
