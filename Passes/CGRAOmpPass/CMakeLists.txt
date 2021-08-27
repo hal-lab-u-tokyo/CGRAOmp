@@ -25,14 +25,11 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  27-08-2021 14:16:34
-#    Last Modified: 27-08-2021 14:22:31
+#    Last Modified: 27-08-2021 17:08:06
 #
 add_llvm_library( libCGRAOmpPass MODULE
   ## append source file list here
   CGRAOmpPass.cpp
-  CGRAModel.cpp
-  VerifyPass.cpp
-  CGRADataFlowGraph.cpp
 
   DEPENDS
   intrinsics_gen

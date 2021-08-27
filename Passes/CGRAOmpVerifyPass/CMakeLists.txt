@@ -21,15 +21,15 @@
 #    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #    SOFTWARE.
 #    
-#    File:          /Passes/OptionPlugin/CMakeLists.txt
+#    File:          /Passes/CGRAOmpVerifyPass/CMakeLists.txt
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
-#    Created Date:  27-08-2021 14:18:38
-#    Last Modified: 27-08-2021 14:18:38
+#    Created Date:  27-08-2021 17:07:48
+#    Last Modified: 27-08-2021 17:07:48
 #
-add_llvm_library( libOptionPlugin MODULE
+add_llvm_library( libCGRAOmpVerifyPass MODULE
   ## append source file list here
-  OptionPlugin.cpp
+  VerifyPass.cpp
 
   DEPENDS
   intrinsics_gen
@@ -38,6 +38,6 @@ add_llvm_library( libOptionPlugin MODULE
   opt
   )
 
-target_include_directories( libOptionPlugin
+target_include_directories( libCGRAOmpVerifyPass
   PRIVATE ${PROJECT_SOURCE_DIR}/include
   )

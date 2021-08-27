@@ -25,15 +25,30 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 27-08-2021 15:28:56
+*    Last Modified: 27-08-2021 17:11:20
 */
 #include "CGRAOmpPass.hpp"
+#include "VerifyPass.hpp"
+
+#include "llvm/IR/Function.h"
 
 using namespace llvm;
 using namespace CGRAOmp;
 
 PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 {
+	errs() << "CGRAOmpPass is called\n";
+	for (auto &F : M) {
+		errs() << F.getName() << "\n";
+		// Skip declaration
+		if (F.isDeclaration()) continue;
+
+		auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+		errs() << "get FAM\n";
+		auto verify_res = FAM.getResult<VerifyPass>(F);
+		errs() << "get Rest\n";
+		errs() << verify_res << "\n";
+	}
 	return PreservedAnalyses::all();
 }
 

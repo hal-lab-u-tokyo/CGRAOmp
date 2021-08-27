@@ -25,9 +25,69 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 27-08-2021 15:00:17
+*    Last Modified: 27-08-2021 16:42:54
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
+
+#include "llvm/IR/PassManager.h"
+#include "llvm/IR/Function.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
+#include "llvm/Support/raw_ostream.h"
+
+using namespace llvm;
+
+namespace CGRAOmp {
+	// Verification Kind
+	enum VerificationKind {
+		// Loop structure
+		MaxNestedLevel,
+		MemoryAccess,
+		InterLoopDep,
+		NestedPerfectly,
+		IterationSize,
+		// Inside loop
+		Conditional,
+		FunctionCall,
+	};
+
+	class VerifyResultBase {
+		public:
+			VerifyResultBase() {};
+			explicit operator bool() const {
+				return !isViolate;
+			}
+
+
+		// interface to print messages
+		virtual void print(raw_ostream &OS) const = 0;
+		void dump() { this->print(errs()); }
+		friend raw_ostream& operator<<(raw_ostream& OS, 
+										const VerifyResultBase &v) {
+			v.print(OS);
+			return OS;
+		}
+
+		protected:
+			bool isViolate = false;
+
+	};
+
+	class VerifyResult : public VerifyResultBase {
+		public:
+			VerifyResult() : VerifyResultBase() {}
+			void print(raw_ostream &OS) const override;
+	};
+
+	class VerifyPass : public AnalysisInfoMixin<VerifyPass> {
+		public:
+			using Result = VerifyResult;
+			Result run(Function &F, FunctionAnalysisManager &AM);
+		private:
+			friend AnalysisInfoMixin<VerifyPass>;
+			static AnalysisKey Key;
+	};
+}
 
 #endif //VerifyPass_H

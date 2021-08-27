@@ -21,10 +21,43 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /Passes/CGRAOmpPass/VerifyPass.cpp
+*    File:          /Passes/CGRAOmpVerifyPass/VerifyPass.cpp
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 27-08-2021 15:03:52
+*    Last Modified: 27-08-2021 17:11:14
 */
 #include "VerifyPass.hpp"
+
+
+using namespace llvm;
+using namespace CGRAOmp;
+
+AnalysisKey VerifyPass::Key;
+
+void VerifyResult::print(raw_ostream &OS) const
+{
+	OS << "this is verifyResult\n";
+}
+
+VerifyResult VerifyPass::run(Function &F, FunctionAnalysisManager &AM)
+{
+	errs() << "VerifyPass is called for " << F.getName() << "\n";
+	return VerifyResult();
+}
+
+
+extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
+llvmGetPassPluginInfo() {
+	return {
+		LLVM_PLUGIN_API_VERSION, "CGRAOmp", "v0.1",
+		[](PassBuilder &PB) {
+			PB.registerAnalysisRegistrationCallback(
+				[](FunctionAnalysisManager &FAM) {
+					FAM.registerPass([&] {
+						return VerifyPass();
+					});
+			});
+		}
+	};
+}
