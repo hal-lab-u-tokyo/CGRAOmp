@@ -21,39 +21,32 @@
 #    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #    SOFTWARE.
 #    
-#    File:          /CMakeLists.txt
+#    File:          /src/CMakeLists.txt
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
-#    Created Date:  26-08-2021 20:50:56
-#    Last Modified: 04-09-2021 17:18:31
+#    Created Date:  04-09-2021 17:17:57
+#    Last Modified: 04-09-2021 17:23:32
 #
+if (CGRAOMP_ENABLE_DOXGEN)
+  find_package(Doxygen)
+  IF(DOXYGEN_FOUND)
+    message("-- Enables building doxygen")
+    set(DOXYGEN_CONF_FILE "doxygen.conf")
+    set(DOXYGEN_CONF_PATH   ${CMAKE_CURRENT_BINARY_DIR}/${DOXYGEN_CONF_FILE})
+    set(DOXYGEN_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+    set(DOXYGEN_TARGET "doc" )
 
-# See docs/CMake.html for instructions about how to build LLVM with CMake.
+    configure_file(${DOXYGEN_CONF_FILE}.in ${DOXYGEN_CONF_PATH})
 
-cmake_minimum_required(VERSION 3.4.3)
-
-project(CGRAOmp VERSION 0.1)
-
-if(POLICY CMP0068)
-  cmake_policy(SET CMP0068 NEW)
-  set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
+    add_custom_target(${DOXYGEN_TARGET} ALL
+                    ${DOXYGEN_EXECUTABLE} ${DOXYGEN_CONF_PATH}
+                    DEPENDS  ${DOXYGEN_CONF_PATH})
+    install(DIRECTORY ${CMAKE_BINARY_DIR}/${CGRAOMP_INSTALL_DOXYGEN_HTML_DIR}/ 
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/${CGRAOMP_INSTALL_DOXYGEN_HTML_DIR})
+  else (DOXYGEN_FOUND)
+    message (WARNING "building doxygen option is specified but doxygen is not found")
+  endif (DOXYGEN_FOUND)
 endif()
 
-if(POLICY CMP0075)
-  cmake_policy(SET CMP0075 NEW)
-endif()
-
-if(POLICY CMP0077)
-  cmake_policy(SET CMP0077 NEW)
-endif()
-
-set (CGRAOMP_ENABLE_DOXGEN OFF CACHE BOOL "Use doxygen to generate llvm API documentation.")
-set(CGRAOMP_INSTALL_DOXYGEN_HTML_DIR "share/docs/doxygen-html"
-    CACHE STRING "Doxygen-generated HTML documentation install directory")
-
-add_subdirectory(src)
-
-# copy some resources to build directory
-file(COPY share DESTINATION ${CMAKE_BINARY_DIR})
-
-install(DIRECTORY share/ DESTINATION share)
+# LLVM Pass libraries
+add_subdirectory(Passes)

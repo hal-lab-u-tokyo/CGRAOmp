@@ -1,6 +1,0 @@
-/// @mainpage CGRAOmp
-///
-/// @section main_intro Introduction
-/// Welcome to CGRAOmp
-///
-/// This documentation describes the interface of CGRAOmp based on LLVM. There are no instructions here on how to use CGRAOmp, only the APIs that make up the software. For usage instructions, please see the user manual.
