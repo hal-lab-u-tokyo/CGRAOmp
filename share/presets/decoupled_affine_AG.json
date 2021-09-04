@@ -1,0 +1,24 @@
+{
+	"category": "decoupled",
+	"address_generator": {
+		"control": "affine",
+		"max_nested_level": 3
+	},
+	"conditional" : {
+		"allowed": false
+	},
+	"inter-loop_dependency": {
+		"allowed": false
+	},
+	"custom_instructions": [ "fexp", "fsin" ],
+	"generic_instructions": [
+		"add", "sub", "mul", "udiv", "sdiv", "and", "or", "xor", "fadd",
+		"fsub", "fmul", "fdiv"
+	],
+	"instruction_map": [
+		{ "op": "add", "flags": ["nuw"], "map": "add" },
+		{ "op": "udiv", "map": "div" },
+		{ "op": "sdiv", "map": "div" },
+		{ "op": "xor", "rhs": {"constant" : -1}, "map": "not"}
+	]
+}

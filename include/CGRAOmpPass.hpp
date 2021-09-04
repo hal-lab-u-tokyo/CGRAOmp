@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 27-08-2021 15:29:15
+*    Last Modified: 28-08-2021 20:33:47
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -35,7 +35,12 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 
+
+#include <system_error>
+
 using namespace llvm;
+
+#define ERR_MSG_PREFIX "CGRAOmpPass \x1B[31m\033[1merror\033[0m: "
 
 namespace CGRAOmp {
 
@@ -46,6 +51,7 @@ namespace CGRAOmp {
 
 	};
 
+	
 }
 
 #endif //CGRAOmpPass_H

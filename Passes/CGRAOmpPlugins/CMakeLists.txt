@@ -25,9 +25,9 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  27-08-2021 14:18:38
-#    Last Modified: 27-08-2021 17:08:16
+#    Last Modified: 28-08-2021 17:44:40
 #
-add_llvm_library( libOptionPlugin MODULE
+add_llvm_library( libCGRAOmpPlugins MODULE
   ## append source file list here
   OptionPlugin.cpp
   CGRAModel.cpp
@@ -40,6 +40,7 @@ add_llvm_library( libOptionPlugin MODULE
   opt
   )
 
-target_include_directories( libOptionPlugin
+target_include_directories( libCGRAOmpPlugins
   PRIVATE ${PROJECT_SOURCE_DIR}/include
   )
+

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 27-08-2021 17:11:14
+*    Last Modified: 28-08-2021 15:29:00
 */
 #include "VerifyPass.hpp"
 
@@ -40,11 +40,28 @@ void VerifyResult::print(raw_ostream &OS) const
 	OS << "this is verifyResult\n";
 }
 
+bool VerifyResult::bool_operator_impl()
+{
+	isViolate = false;
+	// if at least one verification result is violation, it returns violation
+	for (auto it : make_range(each_result.begin(), each_result.end())) {
+		if (!*(it.second)) {
+			isViolate = true;
+			break;
+		}
+	}
+	return !isViolate;
+}
+
+
 VerifyResult VerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 {
-	errs() << "VerifyPass is called for " << F.getName() << "\n";
-	return VerifyResult();
+	VerifyResult result;
+
+
+	return result;
 }
+
 
 
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK

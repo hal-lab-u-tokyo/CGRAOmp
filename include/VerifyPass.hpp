@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 27-08-2021 16:42:54
+*    Last Modified: 27-08-2021 22:33:03
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -35,6 +35,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/ADT/DenseMap.h"
 
 using namespace llvm;
 
@@ -52,11 +53,14 @@ namespace CGRAOmp {
 		FunctionCall,
 	};
 
+	class VerifyPass;
+
+
 	class VerifyResultBase {
 		public:
 			VerifyResultBase() {};
-			explicit operator bool() const {
-				return !isViolate;
+			explicit operator bool() {
+				return this->bool_operator_impl();
 			}
 
 
@@ -69,16 +73,31 @@ namespace CGRAOmp {
 			return OS;
 		}
 
+		void setVio() { isViolate = true; }
 		protected:
+			virtual bool bool_operator_impl() {
+				return !isViolate;
+			}
 			bool isViolate = false;
 
 	};
+
 
 	class VerifyResult : public VerifyResultBase {
 		public:
 			VerifyResult() : VerifyResultBase() {}
 			void print(raw_ostream &OS) const override;
+
+
+		private:
+			friend VerifyPass;
+			DenseMap<int, VerifyResultBase*> each_result;
+			void setResult(VerificationKind kind, VerifyResultBase *R) {
+				each_result[kind] = R;
+			}
+			bool bool_operator_impl() override;
 	};
+
 
 	class VerifyPass : public AnalysisInfoMixin<VerifyPass> {
 		public:
@@ -87,7 +106,9 @@ namespace CGRAOmp {
 		private:
 			friend AnalysisInfoMixin<VerifyPass>;
 			static AnalysisKey Key;
+
 	};
+
 }
 
 #endif //VerifyPass_H

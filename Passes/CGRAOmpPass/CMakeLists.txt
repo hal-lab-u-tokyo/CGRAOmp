@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  27-08-2021 14:16:34
-#    Last Modified: 27-08-2021 17:08:06
+#    Last Modified: 28-08-2021 18:44:03
 #
 add_llvm_library( libCGRAOmpPass MODULE
   ## append source file list here
@@ -40,4 +40,5 @@ add_llvm_library( libCGRAOmpPass MODULE
 
 target_include_directories( libCGRAOmpPass
   PRIVATE ${PROJECT_SOURCE_DIR}/include
-  )
+)
+

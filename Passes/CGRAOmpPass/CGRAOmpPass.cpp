@@ -25,19 +25,35 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 27-08-2021 17:11:20
+*    Last Modified: 28-08-2021 22:39:51
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
+#include "CGRAModel.hpp"
 
 #include "llvm/IR/Function.h"
+#include "llvm/ADT/Statistic.h"
 
 using namespace llvm;
 using namespace CGRAOmp;
 
+#define DEBUG_TYPE "cgraomp"
+
+// # of successfully exracted DFGs
+STATISTIC(num_dfg, "the number of extracted DFGs");
+
 PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 {
 	errs() << "CGRAOmpPass is called\n";
+
+	auto model = parseCGRASetting("share/presets/decoupled_affine_AG.json");
+	if (model) {
+
+	} else {
+		ExitOnError Exit(ERR_MSG_PREFIX);
+		Exit(std::move(model.takeError()));
+	}
+
 	for (auto &F : M) {
 		errs() << F.getName() << "\n";
 		// Skip declaration
@@ -48,10 +64,16 @@ PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 		auto verify_res = FAM.getResult<VerifyPass>(F);
 		errs() << "get Rest\n";
 		errs() << verify_res << "\n";
+		if (verify_res) num_dfg++;
+
 	}
+
+//	CGRAModel hoge;
 	return PreservedAnalyses::all();
 }
 
+
+#undef DEBUG_TYPE
 
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
 llvmGetPassPluginInfo() {

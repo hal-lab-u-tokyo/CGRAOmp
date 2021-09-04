@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  26-08-2021 20:53:10
-#    Last Modified: 27-08-2021 17:09:31
+#    Last Modified: 03-09-2021 18:41:07
 #
 
 # set LLVM version
@@ -55,16 +55,40 @@ include(AddLLVM)
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
+
+if (CGRAOMP_ENABLE_DOXGEN)
+  find_package(Doxygen)
+  IF(DOXYGEN_FOUND)
+    message("-- Enables building doxygen")
+    set(DOXYGEN_CONF_FILE "doxygen.conf")
+    set(DOXYGEN_CONF_PATH   ${CMAKE_CURRENT_BINARY_DIR}/${DOXYGEN_CONF_FILE})
+    set(DOXYGEN_SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR})
+    set(DOXYGEN_TARGET "doc" )
+
+    configure_file(${DOXYGEN_CONF_FILE}.in ${DOXYGEN_CONF_PATH})
+
+    add_custom_target(${DOXYGEN_TARGET} ALL
+                    ${DOXYGEN_EXECUTABLE} ${DOXYGEN_CONF_PATH}
+                    DEPENDS  ${DOXYGEN_CONF_PATH})
+    install(DIRECTORY ${CMAKE_BINARY_DIR}/${CGRAOMP_INSTALL_DOXYGEN_HTML_DIR}/ 
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/${CGRAOMP_INSTALL_DOXYGEN_HTML_DIR})
+  else (DOXYGEN_FOUND)
+    message (WARNING "building doxygen option is specified but doxygen is not found")
+  endif (DOXYGEN_FOUND)
+endif()
+
 # list of passes to be built
 set (LLVM_PASSLIB_LIST
+  CGRAOmpPlugins
   CGRAOmpPass
   CGRAOmpVerifyPass
-  CGRAOmpPlugins
 )
 
-message("${LLVM_PASSLIB_LIST}")
 # add for each lib
+message("-- LLVM libraries to be built for CGRAOmp")
 foreach (PASSLIB IN LISTS LLVM_PASSLIB_LIST)
   add_subdirectory(${PASSLIB})
-  message("add target library: ${PASSLIB}")
+  message(" add target library: ${PASSLIB}")
 endforeach()
+
+
