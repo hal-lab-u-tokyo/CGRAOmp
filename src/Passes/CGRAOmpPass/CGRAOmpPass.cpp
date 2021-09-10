@@ -21,11 +21,11 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /Passes/CGRAOmpPass/CGRAOmpPass.cpp
+*    File:          /src/Passes/CGRAOmpPass/CGRAOmpPass.cpp
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 28-08-2021 22:39:51
+*    Last Modified: 10-09-2021 10:47:34
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
@@ -33,6 +33,8 @@
 
 #include "llvm/IR/Function.h"
 #include "llvm/ADT/Statistic.h"
+
+#include "llvm/IR/Instruction.h"
 
 using namespace llvm;
 using namespace CGRAOmp;
@@ -56,6 +58,15 @@ PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 
 	for (auto &F : M) {
 		errs() << F.getName() << "\n";
+
+
+		// //memo. -Wno-unknown-assumption
+		// auto attrs = F.getAttributes();
+		// for (auto attr_set : make_range(attrs.begin(), attrs.end())) {
+		// 	auto attr = attr_set.getAttribute("llvm.assume");
+		// 	errs() << F.getName() << " " << attr.isValid() << " "
+		// 	<< attr.getAsString() << "\n";
+		// }
 		// Skip declaration
 		if (F.isDeclaration()) continue;
 
@@ -65,6 +76,21 @@ PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 		errs() << "get Rest\n";
 		errs() << verify_res << "\n";
 		if (verify_res) num_dfg++;
+
+
+		for (auto &BB : F) {
+			for (auto &I : BB) {
+				I.print(errs());
+				if (auto entry = model->isSupported(&I)) {
+					errs() << "\tSupported" << "\n";
+					entry->dump();
+				} else {
+					errs() << "\tUnsupported\n";
+				}
+			}
+		}
+		errs() << "fin\n";
+
 
 	}
 

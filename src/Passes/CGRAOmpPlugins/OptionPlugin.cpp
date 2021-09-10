@@ -21,10 +21,15 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /Passes/OptionPlugin/OptionPlugin.cpp
+*    File:          /src/Passes/CGRAOmpPlugins/OptionPlugin.cpp
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 27-08-2021 14:18:09
+*    Last Modified: 08-09-2021 18:16:11
 */
 #include "OptionPlugin.hpp"
+
+using namespace llvm;
+
+cl::opt<bool> CGRAOmpVerbose("cgraomp-verbose", cl::init(false), 
+			cl::desc("Enables verbose output for CGRAOmp"));

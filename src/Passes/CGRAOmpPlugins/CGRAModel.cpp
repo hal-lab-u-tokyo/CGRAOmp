@@ -21,16 +21,17 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /Passes/CGRAOmpPlugins/CGRAModel.cpp
+*    File:          /src/Passes/CGRAOmpPlugins/CGRAModel.cpp
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:46
-*    Last Modified: 03-09-2021 15:51:23
+*    Last Modified: 09-09-2021 20:23:19
 */
 #include "CGRAModel.hpp"
 
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/IR/InstrTypes.h"
 
 #include <fstream>
 
@@ -38,43 +39,41 @@ using namespace llvm;
 using namespace CGRAOmp;
 using namespace std;
 
-/* ---------- Implementation of ModelError ----------- */
+/* ===================== Implementation of ModelError ===================== */
 char ModelError::ID = 0;
 
 void ModelError::log(raw_ostream &OS) const
 {
 	OS << formatv("fail to parse \"{0}\"\n", filename);
+	string after_str = "";
 	switch (errtype) {
 		case ErrorType::MissingKey:
-			OS << formatv("Missing key: {0}", error_key);
+			OS << formatv("Missing key: \"{0}\"", error_key);
 			break;
 		case ErrorType::InvalidDataType:
 			OS << formatv("{0} type data is expected for \"{1}\"", 
 				exptected_type, error_key);
-			if (json_val) {
-				OS << " but "  << *json_val << " is specified";
+			if (json_val != "") {
+				OS << " but "  << json_val << " is specified";
 			}
 			break;
 		case ErrorType::InvalidValue:
-			OS << formatv("Invalid data \"{0}\" for {1}\n"
-			"available values: {2}",
-				 error_val, error_key,
-				 make_range(valid_values.begin(), valid_values.end()));
+			OS << formatv("Invalid data \"{0}\" for {1}",
+				 error_val, error_key);
+			after_str = formatv("available values: {0}",
+					 make_range(valid_values.begin(), valid_values.end()));
 			break;
+		case ErrorType::NoImplemented:
+			OS << formatv("Currently, configuring {0} for {1} is not implemented", error_val, error_key);
 	}
-	if (_region != "") {
-		OS << formatv(" in {0}", _region);
+	if (region != "") {
+		OS << formatv(" in {0}", region);
+	}
+	if (after_str != "") {
+		OS << "\n" << after_str;
 	}
 }
 
-/**
- * @brief Construct a new ModelError when a value is invalid for the specified key
- * 
- * @param filename filename of the parsed configration file 
- * @param key key string containing invalid value
- * @param val the invalid value string
- * @param list list of valid values
- */
 ModelError::ModelError(StringRef filename, StringRef key, StringRef val,
 						ArrayRef<StringRef> list) :
 					filename(filename),
@@ -88,18 +87,17 @@ ModelError::ModelError(StringRef filename, StringRef key, StringRef val,
 	}
 }
 
-/* ---------- Utility functions for parsing the configration  ---------- */
-/// Check if val is a valid setting for SettingT
+/* ============ Utility functions for parsing the configration  ============ */
+
 template <typename SettingT>
-bool containsValidData(StringMap<SettingT> settingMap, StringRef val)
+bool CGRAOmp::containsValidData(StringMap<SettingT> settingMap, StringRef val)
 {
 	auto itr = settingMap.find(val);
 	return (itr != settingMap.end());
 }
 
-/// Extract values from SettingMap
 template <typename SettingT>
-SmallVector<StringRef> get_setting_values(StringMap<SettingT> settingMap)
+SmallVector<StringRef> CGRAOmp::get_setting_values(StringMap<SettingT> settingMap)
 {
 	SmallVector<StringRef> vec;
 	for (auto itr : settingMap.keys()) {
@@ -108,8 +106,7 @@ SmallVector<StringRef> get_setting_values(StringMap<SettingT> settingMap)
 	return vec;
 }
 
-// 
-Expected<CGRAModel::CGRACategory> getCategory(json::Object *json_obj,
+Expected<CGRAModel::CGRACategory> CGRAOmp::getCategory(json::Object *json_obj,
 												StringRef filename)
 {
 	CGRAModel::CGRACategory cgra_cat;
@@ -138,13 +135,84 @@ Expected<CGRAModel::CGRACategory> getCategory(json::Object *json_obj,
 }
 
 
-/* ---------- Implementation of CGRAModel class ---------- */
+char conditional_key[] = "conditional";
+char interloopdep_key[] = "inter-loop_dependency";
 
-/// valid settings for CGRA category
-StringMap<CGRAModel::CGRACategory> CGRAModel::CategoryMap({
-	make_pair("generic", CGRAModel::CGRACategory::Generic),
-	make_pair("decoupled", CGRAModel::CGRACategory::Decoupled)
-});
+
+/**
+ * @details checking steps
+ * -# an item whose key = key_str exists?
+ * -# its value is an object?
+ * -# the object contains an item whose key = "allowed"?
+ * -# its value is boolean type?
+ * 	- false: return SettingT::No
+ * 	- true: continue
+ * -# the object contains an item whose key = "type"?
+ * -# its value is string type?
+ * -# settingMap contains its value as key?
+ * 	- yes: return it value
+ * 	- no: return ModelError
+ */
+template <char const *key_str, typename SettingT>
+Expected<SettingT> CGRAOmp::getOption(json::Object *json_obj,
+										StringRef filename,
+										StringMap<SettingT> settingMap)
+{
+
+	auto make_model_error = [&](auto... args) {
+		auto EI = std::make_unique<ModelError>(filename, args...);
+		EI->setRegion(key_str);
+		return Error(std::move(EI));
+	};
+
+	SettingT style;
+	if (auto *cond = json_obj->get(key_str)) {
+		auto cond_obj = cond->getAsObject();
+		// get allowed or not allowed
+		if (cond_obj->get("allowed")) {
+			auto isAllowed = cond_obj->get("allowed")->getAsBoolean();
+			if (isAllowed.hasValue()) {
+				if (!isAllowed.getValue()) {
+					return SettingT::No;
+				}
+			} else {
+				// not bool type
+				return make_model_error("allowed", "bool", 
+								cond_obj->get("allowed"));
+			}
+		} else {
+			// missing allowed
+			return make_model_error("allowed");
+		}
+
+		// in the case of conditional allowed
+		if (cond_obj->get("type")) {
+			auto t_str = cond_obj->get("type")->getAsString();
+			if (t_str.hasValue()) {
+				if (containsValidData(settingMap,
+										t_str.getValue())) {
+					style = settingMap[t_str.getValue()];
+				} else {
+					// invalid data
+					return make_model_error("type", t_str.getValue(),
+								get_setting_values(settingMap));
+				}
+			} else {
+				// not string type
+				return make_model_error("type", "string", 
+								cond_obj->get("type"));
+			}
+		} else {
+			// missing style
+			return make_model_error("type");
+		}
+	} else {
+		//missing conditional
+		return make_error<ModelError>(filename, key_str);
+	}
+
+	return style;
+}
 
 
 Expected<CGRAModel> CGRAOmp::parseCGRASetting(StringRef filename)
@@ -166,6 +234,7 @@ Expected<CGRAModel> CGRAOmp::parseCGRASetting(StringRef filename)
 							istreambuf_iterator<char>());
 	auto parsed = json::parse(json_str);
 
+	// fail to parse
 	if (!parsed) {
 		error_code parse_ec;
 		Error E = parsed.takeError();
@@ -179,14 +248,121 @@ Expected<CGRAModel> CGRAOmp::parseCGRASetting(StringRef filename)
 	json::Object *top_obj = (*parsed).getAsObject();
 
 	// Parse JSON file
+	CGRAModel *model;
+	// check common settings
 	auto cgra_cat = getCategory(top_obj, filename);
-	if (cgra_cat) {
-		errs() << static_cast<std::underlying_type<CGRAModel::CGRACategory>::type>(*cgra_cat) << "\n";
-
-	} else {
+	if (!cgra_cat) {
+		// in the case of invalid category
 		return cgra_cat.takeError();
+	}
+	auto cond_type = getOption<conditional_key, CGRAModel::ConditionalStyle>(top_obj,filename, CGRAModel::CondStyleMap);
+	if (!cond_type) {
+		return cond_type.takeError();
+	}
+	auto ild_type = getOption<interloopdep_key, CGRAModel::InterLoopDep>(top_obj,filename, CGRAModel::InterLoopDepMap);
+	if (!ild_type) {
+		return ild_type.takeError();
+	}
+
+	// instantiate an actual class of model
+	switch (*cgra_cat) {
+		case CGRAModel::CGRACategory::Decoupled:
+			model = new DecoupledCGRA(filename, *cond_type, *ild_type);
+			break;
+		case CGRAModel::CGRACategory::Generic:
+			model = new GenericCGRA(filename);
+			break;
+		default:
+			auto config = make_pair<StringRef, StringRef>("category",
+					top_obj->get("category")->getAsString().getValue());
+			return make_error<ModelError>(filename,	config);
 	}
 
 
-	return CGRAModel();
+	// add supported instructions
+	auto inst_list = getStringArray(top_obj, "generic_instructions", filename);
+	if (!inst_list) {
+		return inst_list.takeError();
+	} else {
+		for (auto inst : *inst_list) {
+			Error E = model->addSupportedInst(inst, false);
+			if (E) {
+				return Error(std::move(E));
+			}
+		}
+	}
+
+	// add custom instructions
+	auto cust_list = getStringArray(top_obj, "custom_instructions", filename);
+	if (!cust_list) {
+		return cust_list.takeError();
+	} else {
+		for (auto inst : *cust_list) {
+			cantFail(std::move(model->addSupportedInst(inst, true)));
+		}
+	}
+
+	// add instruction mapping (optional)
+	if (top_obj->get("instruction_map")) {
+		auto inst_map_obj = top_obj->get("instruction_map")->getAsArray();
+		for (auto entry : *inst_map_obj) {
+			auto map_cond = createMapCondition(entry.getAsObject(), filename);
+			if (!map_cond) {
+				return map_cond.takeError();
+			} else {
+				if (auto E = model->add_map_entry(map_cond->first,
+								map_cond->second)) {
+					return std::move(E);
+				}
+			}
+		}
+	}
+
+
+	return std::move(*model);
+}
+
+
+/* =================== Implementation of CGRAModel class =================== */
+// valid settings for CGRA category
+StringMap<CGRAModel::CGRACategory> CGRAModel::CategoryMap({
+	make_pair("generic", CGRAModel::CGRACategory::Generic),
+	make_pair("decoupled", CGRAModel::CGRACategory::Decoupled),
+});
+// valid settings for Conditional Style
+StringMap<CGRAModel::ConditionalStyle> CGRAModel::CondStyleMap({
+	make_pair("MuxInst", CGRAModel::ConditionalStyle::MuxInst),
+	make_pair("TriState", CGRAModel::ConditionalStyle::TriState),
+});
+// valid settings for inter-loop dependecy
+StringMap<CGRAModel::InterLoopDep> CGRAModel::InterLoopDepMap({
+	make_pair("generic", CGRAModel::InterLoopDep::Generic),
+	make_pair("BackwardInst", CGRAModel::InterLoopDep::BackwardInst),
+});
+
+
+Error CGRAModel::addSupportedInst(StringRef opcode, bool isCustom)
+{
+	if (isCustom) {
+		// add custom inst never return Error
+		inst_map.add_custom_inst(opcode);
+		return ErrorSuccess();
+	} else {
+		return std::move(inst_map.add_generic_inst(opcode));
+	}
+}
+
+
+Error CGRAModel::add_map_entry(StringRef opcode, MapCondition *map_cond)
+{
+	if (auto E = inst_map.add_map_entry(opcode, map_cond)) {
+		return std::move(E);
+	} else {
+		return ErrorSuccess();
+	}
+}
+
+InstMapEntry* CGRAModel::isSupported(Instruction *I)
+{
+	return inst_map.find(I);
 }

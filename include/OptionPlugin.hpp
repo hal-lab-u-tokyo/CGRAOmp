@@ -25,9 +25,15 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:20:02
-*    Last Modified: 27-08-2021 14:20:02
+*    Last Modified: 08-09-2021 18:22:12
 */
 #ifndef OptionPlugin_H
 #define OptionPlugin_H
+
+#include "llvm/Support/CommandLine.h"
+
+using namespace llvm;
+
+extern cl::opt<bool> CGRAOmpVerbose;
 
 #endif //OptionPlugin_H

@@ -25,73 +25,169 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:30
-*    Last Modified: 03-09-2021 15:51:21
+*    Last Modified: 09-09-2021 20:23:50
 */
 #ifndef CGRAModel_H
 #define CGRAModel_H
 
-#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
+
+#include "CGRAInstMap.hpp"
+
+#include <string>
 
 
 using namespace llvm;
 
 namespace CGRAOmp
 {
-	class InstMapEntry {
-		public:
-			InstMapEntry() {};
-	};
 
+	/**
+	 * @class CGRAModel
+	 * @brief A base class of CGRA model for DFG extraction
+	 */
 	class CGRAModel {
 		public:
-			CGRAModel() {
-				errs() << "Constructor\n";
-			}
-			// CGRA style settings
+			/**
+			 * @enum CGRACategory
+			 * @brief a category of the CGRA model
+			 */
 			enum class CGRACategory {
+				/// Generic CGRAs
 				Generic,
-				Decoupled
+				/// A CGRA decoupling memory access & computation
+				Decoupled,
 			};
 
+			/**
+			 * @enum ConditionalStyle
+			 * @brief Ability to handle conditional execution (i.e., if-else part)
+			 */
 			enum class ConditionalStyle {
+				/// conditional is not allowd
 				No,
+				/// conditional is handled by MUX operation
 				MuxInst,
+				/// conditional is handled by TriState ALU
 				TriState
 			};
 
+			/**
+			 * @enum InterLoopDep
+			 * @brief How to describe the inter-loop dependecy
+			 */
 			enum class InterLoopDep {
+				/// loop with inter-loop dependency is not allowed
 				No,
+				/// Generating a DFG with back-edge as inter-loop dependency
 				Generic,
+				/// Replacing the inter-loop dependency with backward operation node
 				BackwardInst,
 			};
-			// Available set of each value
+			/// Map category string to CGRACategory
 			static StringMap<CGRACategory> CategoryMap;
+			/// Map category string to ConditionalStyle
+			static StringMap<ConditionalStyle> CondStyleMap;
+			/// Map category string to InterLoopDep
+			static StringMap<InterLoopDep> InterLoopDepMap;
+
+			// constructors
+			/**
+			 * @brief Construct a new CGRAModel object
+			 * 
+			 * @param filename filename of the configration file
+			 * @param category category of the CGRA
+			 * @param cond conditional style of the CGRA
+			 * @param inter_loop_dep ability to handle inter loop dependency
+			 */
+			explicit CGRAModel(StringRef filename, CGRACategory category,
+								ConditionalStyle cond,
+								InterLoopDep inter_loop_dep) :
+								filename(filename), category(category),
+								cond(cond), inter_loop_dep(inter_loop_dep) {};
+			CGRAModel() = delete;
+			/// Copy constructor
+			CGRAModel(const CGRAModel &) = default;
+			/// Move constructor
+			CGRAModel(CGRAModel &&) = default;
+
+			/**
+			 * @brief add a supported insturction for the CGRA
+			 * 
+			 * @param opcode opcode of the instruction
+			 * 	- if it is already added instruction, this function does nothing
+			 * @param isCustom true if the instruction is custom instruction (i.e., not LLVM-IR instruction)
+			 * @return Error is returned if unknown opcode is specified
+			 */
+			Error addSupportedInst(StringRef opcode, bool isCustom);
+
+			/**
+			 * @brief add a instruction mapping entry to the CGRA model
+			 * 
+			 * @param opcode opcode of the instruction to be replaced
+			 * @param map_cond a mapping condition
+			 * @return Error is returned if the opcode is for unsupported instruction
+			 */
+			Error add_map_entry(StringRef opcode, MapCondition *map_cond);
+
+			/**
+			 * @brief checking whether the instruction is supported by the CGRA or not.
+			 * 
+			 * @param I an instruction
+			 * @return a pointer of InstMapEntry is return if it is supported.
+			 * Otherwise, it return nullptr.
+			 */
+			InstMapEntry* isSupported(Instruction *I);
 
 		protected:
+			StringRef filename;
 			ConditionalStyle cond;
 			InterLoopDep inter_loop_dep;
-			StringSet<> support_instr;
-			SmallVector<InstMapEntry> inst_map;
+			CGRACategory category;
+			InstMap inst_map;
+
+
 	};
 
+	/**
+	 * @class DecoupledCGRA
+	 * @brief CGRA model for category "decoupled"
+	*/
 	class DecoupledCGRA : public CGRAModel {
 		public:
-			DecoupledCGRA();
+			/**
+			 * @brief Construct a new DecoupledCGRA
+			 *
+			 * @param filename filename of the configration file
+			 * @param cond conditional style of the CGRA
+			 * @param inter_loop_dep ability to handle inter loop dependency
+			 */
+			DecoupledCGRA(StringRef filename, ConditionalStyle cond,
+							InterLoopDep inter_loop_dep) :
+				CGRAModel(filename, CGRACategory::Decoupled,
+							cond, inter_loop_dep) {};
 
 		private:
 	};
 
+	/**
+	 * @class GenericCGRA
+	 * @brief CGRA model for category "generic"
+	*/
 	class GenericCGRA : public CGRAModel {
-
+		public:
+			GenericCGRA(StringRef filename) :
+				CGRAModel(filename, CGRACategory::Generic,
+							ConditionalStyle::No,
+							InterLoopDep::No) {}
+		private:
 	};
-
-	Expected<CGRAModel> parseCGRASetting(StringRef filename);
 
 	/**
 	 * @class ModelError
@@ -125,14 +221,41 @@ namespace CGRAOmp
 					filename(filename),
 					errtype(ErrorType::InvalidDataType),
 					error_key(key),
-					exptected_type(exptected_type),
-					json_val(v) {}
+					exptected_type(exptected_type) {
+						if (v != nullptr) {
+							raw_string_ostream OS(json_val);
+							OS << *v;
+						}
+					}
 
+			/**
+			 * @brief Construct a new ModelError when not implemented configuration is specified
+			 * 
+			 * @param filename filename of the parsed configration file 
+			 * @param config a pair of key and value string for the configuration
+			 */
+			ModelError(StringRef filename, std::pair<StringRef,StringRef> config) :
+				filename(filename), errtype(ErrorType::NoImplemented),
+				error_key(config.first), error_val(config.second) {};
+
+			/**
+			 * @brief Construct a new ModelError when a value is invalid for the specified key
+			 * 
+			 * @param filename filename of the parsed configration file 
+			 * @param key key string containing invalid value
+			 * @param val the invalid value string
+			 * @param list list of valid values
+			 */
 			ModelError(StringRef filename, StringRef key, 
 						StringRef val, ArrayRef<StringRef> list);
 
-			void setRegion(StringRef region) {
-				_region = region;
+			/**
+			 * @brief set a region where parse error ocurrs
+			 * 
+			 * @param region_str a string of region info for error message
+			 */
+			void setRegion(StringRef region_str) {
+				region = region_str;
 			}
 
 			static char ID;
@@ -141,6 +264,17 @@ namespace CGRAOmp
 				return std::error_code(41, std::generic_category());
 			}
 			void log(raw_ostream &OS) const override;
+
+
+			/**
+			 * @brief check if the error cause if due to missing key
+			 * 
+			 * @return true in the case of missing key
+			 * @return false otherwise
+			 */
+			bool isMissingKey() {
+				return errtype == ErrorType::MissingKey;
+			}
 
 		private:
 			/**
@@ -154,18 +288,80 @@ namespace CGRAOmp
 				InvalidDataType,
 				/// specified value is not valid configuration
 				InvalidValue,
+				/// currently not implemented
+				NoImplemented,
 			};
 
 			ErrorType errtype;
-			json::Value *json_val = nullptr;
+			std::string json_val = "";
 			StringRef filename;
 			StringRef error_key;
 			StringRef error_val;
 			StringRef exptected_type;
-			StringRef _region = "";
+			StringRef region = "";
 			SmallVector<StringRef> valid_values;
 
 	};
+
+
+	/* ---------- Utility functions  ---------- */
+	/**
+	 * @brief a helper function to instantiate CGRAModel based on JSON configfile
+	 * 
+	 * @param filepath filepath to the JSON config file
+	 * @return Expected<CGRAModel> CGRAModel if there is no error. Otherwise, it contains ModelError
+	 */
+	Expected<CGRAModel> parseCGRASetting(StringRef filepath);
+
+	/**
+	 * @brief a template to extract only values from SettingMap
+	 * 
+	 * @tparam SettingT type of setting value (e.g., CGRACategory)
+	 * @param settingMap map setting string to SettingT value
+	 * @return SmallVector<StringRef> the extracted values
+	 */
+	template <typename SettingT>
+	SmallVector<StringRef> get_setting_values(StringMap<SettingT> settingMap);
+
+	/**
+	 * @brief Check if val is a valid setting for SettingT
+	 * 
+	 * @tparam SettingT type of setting value (e.g., CGRACategory)
+	 * @param settingMap map setting string to SettingT value
+	 * @param val a value of string to be checked
+	 * @return true the value is valid
+	 * @return false the value is unknown
+	 */
+	template <typename SettingT>
+	bool containsValidData(StringMap<SettingT> settingMap, StringRef val);
+
+	/**
+	 * @brief Get CGRACategory from JSON config
+	 * 
+	 * @param json_obj parsed JSON config
+	 * @param filename filename of JSON config (just for error message)
+	 * @return Expected<CGRAModel::CGRACategory> CGRACategory if there is no error. Otherwise, it contains ModelError.
+	 */
+	Expected<CGRAModel::CGRACategory> getCategory(json::Object *json_obj,
+													StringRef filename);
+
+	/**
+	 * @brief Get common option from JSON config
+	 * 
+	 * @tparam *key_str key string
+	 * @tparam SettingT type of setting value (e.g., CGRACategory)
+	 * @param json_obj parsed JSON config
+	 * @param filename filename of JSON config (just for error message)
+	 * @param settingMap  map setting string to SettingT value
+	 * @return Expected<SettingT> SettingT value if there is no error. Otherwise, it contains ModelError.
+	 */
+	template <char const *key_str, typename SettingT>
+	Expected<SettingT> getOption(json::Object *json_obj,
+											StringRef filename,
+											StringMap<SettingT> settingMap);
+
+
+
 } // namespace CGRAOmp
 
 

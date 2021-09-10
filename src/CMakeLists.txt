@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  04-09-2021 17:17:57
-#    Last Modified: 04-09-2021 17:23:32
+#    Last Modified: 06-09-2021 19:06:44
 #
 if (CGRAOMP_ENABLE_DOXGEN)
   find_package(Doxygen)
@@ -49,4 +49,5 @@ if (CGRAOMP_ENABLE_DOXGEN)
 endif()
 
 # LLVM Pass libraries
+set(CMAKE_CXX_STANDARD 17)
 add_subdirectory(Passes)
