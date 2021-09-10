@@ -21,11 +21,11 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /src/Passes/CGRAOmpPlugins/CGRAInstMap.cpp
+*    File:          /src/Passes/CGRAOmpComponents/CGRAInstMap.cpp
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 10-09-2021 11:25:43
+*    Last Modified: 10-09-2021 11:46:58
 */
 
 #include "CGRAInstMap.hpp"
