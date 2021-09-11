@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 10-09-2021 11:46:58
+*    Last Modified: 11-09-2021 17:32:20
 */
 
 #include "CGRAInstMap.hpp"
@@ -204,7 +204,7 @@ Error InstMap::add_generic_inst(StringRef opcode)
 {
 	if (defaultEntries.find(opcode) != defaultEntries.end()) {
 		// already added
-		if (CGRAOmpVerbose) {
+		if (OptVerbose) {
 			errs() << formatv(WARN_MSG_PREFIX
 				"instruction \"{0}\" is already added\n", opcode);
 		}
@@ -228,7 +228,7 @@ void InstMap::add_custom_inst(StringRef opcode)
 {
 	if (defaultEntries.find(opcode) != defaultEntries.end()) {
 		// already added
-		if (CGRAOmpVerbose) {
+		if (OptVerbose) {
 			errs() << formatv(WARN_MSG_PREFIX
 				"instruction \"{0}\" is already added\n", opcode);
 		}
@@ -554,7 +554,7 @@ Expected<pair<StringRef,MapCondition*>>  CGRAOmp::createMapCondition(json::Objec
 	if (json_obj->get("rhs")) {
 		if (lhs_en) {
 			// both left and right hand side are specified, so ignore right
-			if (CGRAOmpVerbose) {
+			if (OptVerbose) {
 				errs() << formatv(WARN_MSG_PREFIX
 				"both left and right hand side condition is specified for an instruction mapping for {0}. So, one for the right hand side is ignored\n", target_inst);
 			}

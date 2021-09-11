@@ -21,15 +21,23 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /src/Passes/CGRAOmpPlugins/OptionPlugin.cpp
+*    File:          /src/Passes/CGRAOmpComponents/OptionPlugin.cpp
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 08-09-2021 18:16:11
+*    Last Modified: 11-09-2021 17:31:41
 */
 #include "OptionPlugin.hpp"
 
 using namespace llvm;
+using namespace std;
 
-cl::opt<bool> CGRAOmpVerbose("cgraomp-verbose", cl::init(false), 
+cl::opt<bool> CGRAOmp::OptVerbose("cgraomp-verbose", cl::init(false), 
 			cl::desc("Enables verbose output for CGRAOmp"));
+
+cl::opt<string> CGRAOmp::OptDFGOpKey("cgra-dfg-op-key", cl::init("op"),
+			cl::desc("opcode key for DOT generation"), cl::value_desc("key"));
+
+cl::opt<bool> CGRAOmp::OptDFGHumanReadable("cgra-dfg-h", cl::init(false), 
+			cl::desc("Save DOT graph with human readable node name"));
+

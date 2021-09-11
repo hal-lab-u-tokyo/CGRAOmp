@@ -25,11 +25,12 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 10-09-2021 10:47:34
+*    Last Modified: 11-09-2021 18:12:13
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
 #include "CGRAModel.hpp"
+#include "CGRADataFlowGraph.hpp"
 
 #include "llvm/IR/Function.h"
 #include "llvm/ADT/Statistic.h"
@@ -90,9 +91,35 @@ PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 			}
 		}
 		errs() << "fin\n";
-
-
 	}
+
+	auto dfg = CGRADFG();
+	SmallVector<DFGNode*> IDtoNode;
+	InstMap inst_map;
+	cantFail(inst_map.add_generic_inst("add"));
+	for (int i = 0; i < 5; i++) {
+		auto *NewNode = new ComputeNode(i, inst_map.find("add"));
+		IDtoNode.push_back(NewNode);
+		dfg.addNode(*NewNode);
+	}
+	SmallVector<pair<int,int>> edge_list = {{0, 3}, {1, 3}, {2, 4}, {3, 4}};
+	for (auto e : edge_list) {
+		auto *NewEdge = new DFGEdge(*IDtoNode[e.second]);
+		dfg.connect(*IDtoNode[e.first], *IDtoNode[e.second], *NewEdge);
+	}
+
+	errs() << "DFS\n";
+	for (auto &v : depth_first(&dfg)) {
+		//skip virtual root
+		if (*v == dfg.getRoot()) continue;
+			errs() << formatv("\tID {0}\n", v->getID());
+	}
+
+	if (auto E = dfg.saveAsDotGraph("graph_test.dot")) {
+		ExitOnError Exit(ERR_MSG_PREFIX);
+		Exit(std::move(E));
+	}
+
 
 //	CGRAModel hoge;
 	return PreservedAnalyses::all();

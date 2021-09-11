@@ -25,8 +25,75 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 10-09-2021 11:46:42
+*    Last Modified: 11-09-2021 18:04:27
 */
 
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/GraphWriter.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Casting.h"
 
 #include "CGRADataFlowGraph.hpp"
+#include "OptionPlugin.hpp"
+
+#include <system_error>
+#include <regex>
+
+using namespace llvm;
+using namespace std;
+
+/* ================== Implementation of CGRADFG ================== */
+bool CGRADFG::addNode(NodeType &N)
+{
+	auto E = new DFGEdge(N);
+	auto result = CGRADFGBase::addNode(N);
+	return result && CGRADFGBase::connect(getRoot(), N, *E);
+}
+
+bool CGRADFG::connect(NodeType &Src, NodeType &Dst, EdgeType &E)
+{
+	auto result = CGRADFGBase::connect(Src, Dst, E);
+	// if there exists only an edge: vroot -> Dst, remove it.
+	EdgeListTy vedges;
+	if (getRoot().findEdgesTo(Dst, vedges)) {
+		assert(vedges.size() == 1 && "more than one edges from virtual root to a node");
+		getRoot().removeEdge(**(vedges.begin()));
+	}
+	return result;
+}
+
+Error CGRADFG::saveAsDotGraph(StringRef filepath)
+{
+	bool human_readable = CGRAOmp::OptDFGHumanReadable;
+	// open file
+	error_code EC;
+	raw_fd_ostream File(filepath, EC, sys::fs::OpenFlags::F_Text);
+	string buf;
+	raw_string_ostream StrOS(buf);
+	raw_ostream *GF = (human_readable) ? dyn_cast<raw_ostream>(&StrOS) :
+										dyn_cast<raw_ostream>(&File);
+
+	if (!EC) {
+		WriteGraph(*GF, (const CGRADFG*)(this));
+		if (human_readable) {
+			for (auto *N : *this) {
+				if (*N == getRoot()) continue;
+				string beforeName = formatv("Node{0:x1}", (const void*)N);
+				string afterName = N->getUniqueName();
+				buf = regex_replace(buf, regex(beforeName), afterName);
+			}
+			File << buf;
+		}
+	} else {
+		return errorCodeToError(EC);
+	}
+	return ErrorSuccess();
+}
+
+string CGRADFGDotGraphTraits::getEdgeAttributes(const DFGNode *Node, 
+					GraphTraits<DFGNode *>::ChildIteratorType I,
+					  const CGRADFG *G)
+{
+	const DFGEdge *E = static_cast<const DFGEdge*>(*I.getCurrent());
+	return "";
+}

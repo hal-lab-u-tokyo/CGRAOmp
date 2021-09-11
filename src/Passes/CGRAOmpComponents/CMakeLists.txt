@@ -21,13 +21,13 @@
 #    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #    SOFTWARE.
 #    
-#    File:          /src/Passes/CGRAOmpPlugins/CMakeLists.txt
+#    File:          /src/Passes/CGRAOmpComponents/CMakeLists.txt
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  27-08-2021 14:18:38
-#    Last Modified: 05-09-2021 18:39:42
+#    Last Modified: 10-09-2021 12:20:40
 #
-add_llvm_library( libCGRAOmpPlugins MODULE
+add_llvm_library( libCGRAOmpComponents MODULE
   ## append source file list here
   OptionPlugin.cpp
   CGRAModel.cpp
@@ -41,7 +41,7 @@ add_llvm_library( libCGRAOmpPlugins MODULE
   opt
   )
 
-target_include_directories( libCGRAOmpPlugins
+target_include_directories( libCGRAOmpComponents
   PRIVATE ${PROJECT_SOURCE_DIR}/include
   )
 

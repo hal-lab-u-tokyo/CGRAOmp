@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:35:11
-*    Last Modified: 10-09-2021 11:29:58
+*    Last Modified: 11-09-2021 18:03:49
 */
 
 #ifndef CGRAInstMap_H
@@ -153,6 +153,15 @@ namespace CGRAOmp
 			 */
 			bool match(Instruction *I);
 
+			/**
+			 * @brief get map name associated with this condition
+			 * 
+			 * @return string of map name
+			 */
+			std::string getMapName() {
+				return map_name;
+			}
+
 			void print(raw_ostream &OS);
 
 			void dump() {
@@ -279,6 +288,14 @@ namespace CGRAOmp
 			virtual bool match(StringRef opcode) {
 				return opcode_str == opcode;
 			};
+
+			/**
+			 * @brief get the map name of this entry
+			 */
+			virtual std::string getMapName() {
+				return map_cond->getMapName();
+			}
+
 
 			void print(raw_ostream &OS);
 			void dump() {

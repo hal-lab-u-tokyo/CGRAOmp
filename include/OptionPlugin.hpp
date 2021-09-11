@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:20:02
-*    Last Modified: 10-09-2021 11:41:39
+*    Last Modified: 11-09-2021 17:34:50
 */
 #ifndef OptionPlugin_H
 #define OptionPlugin_H
@@ -33,9 +33,18 @@
 #include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
+using namespace std;
 
+namespace CGRAOmp
+{
 
-/// a verbose option
-extern cl::opt<bool> CGRAOmpVerbose;
+	/// a verbose option
+	extern cl::opt<bool> OptVerbose;
+	/// key string for opcode in DOT graph
+	extern cl::opt<string> OptDFGOpKey;
+	/// to save human readable DOT
+	extern cl::opt<bool> OptDFGHumanReadable;
+
+}
 
 #endif //OptionPlugin_H
