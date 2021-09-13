@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 13-09-2021 16:52:12
+*    Last Modified: 13-09-2021 17:17:42
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -62,6 +62,12 @@ bool CGRADFG::connect(NodeType &Src, NodeType &Dst, EdgeType &E)
 	return result;
 }
 
+/**
+ * @details If OptDFGPlainNodeName option is enabled,
+ * this method calls convertToReadableNodeName.
+ * Then, the converted contents is saved as a file.
+ *
+*/
 Error CGRADFG::saveAsDotGraph(StringRef filepath)
 {
 	bool human_readable = CGRAOmp::OptDFGPlainNodeName;

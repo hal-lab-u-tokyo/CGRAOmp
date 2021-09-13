@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 13-09-2021 16:48:42
+*    Last Modified: 13-09-2021 17:16:22
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -161,38 +161,89 @@ namespace llvm {
 			using NodeType = DFGNode;
 			using EdgeType = DFGEdge;
 
+			/// default constructor
 			CGRADFG() : CGRADFGBase() {
 				createVirtualRoot();
 			};
 			CGRADFG(const CGRADFG &G) = delete;
+			/// move constructor
 			CGRADFG(CGRADFG &&G) : CGRADFGBase(std::move(G)) {
 				virtual_root = G.virtual_root;
 				G.virtual_root = nullptr;
 			};
+
+			/// constructor with an initial node
 			CGRADFG(NodeType &N) : CGRADFGBase(N) {
 				createVirtualRoot();
+				auto E = new DFGEdge(N);
+				connect(getRoot(), N, *E);
 			};
 
+			/// Destructor
 			~CGRADFG() {
 				delete virtual_root;
+				Nodes.clear();
 			}
 
+			/**
+			 * @brief Get the virtual route node object
+			 * 
+			 * @return NodeType&: a reference to the virtual root
+			 */
 			NodeType &getRoot() const {
 				return *virtual_root;
 			}
 
+			/**
+			 * @brief add a new node to the graph
+			 * 
+			 * @param N a DFG node to be added
+			 * @return true in the case of no error
+			 * @return Otherwise, false
+			 */
 			bool addNode(NodeType &N);
 
+			/**
+			 * @brief connect two nodes with an edge
+			 * 
+			 * @param Src source node
+			 * @param Dst destination node
+			 * @param E an edge pointing to the dest. node
+			 * @return true in the case of no error
+			 * @return Otherwise, false
+			 */
 			bool connect(NodeType &Src, NodeType &Dst, EdgeType &E);
 
+			/**
+			 * @brief convert "Node_" + @a pointer style node name to more plain name
+			 * 
+			 * @param dot_string contents of the DOT file
+			 * @return string converted contents
+			 */
 			string convertToReadableNodeName(const string dot_string) const;
 
+			/**
+			 * @brief save the graph as DOT file
+			 * 
+			 * @param filepath filepath of the save file
+			 * @return Error in the case of failure in creating a new file (e.g., because the same name file already exists)
+			 */
 			Error saveAsDotGraph(StringRef filepath);
 
+			/**
+			 * @brief Set the Name object
+			 * 
+			 * @param graph_name name of the graph
+			 */
 			void setName(const string graph_name) {
 				name = graph_name;
 			}
 
+			/**
+			 * @brief Get the Name object
+			 * 
+			 * @return string of the graph name
+			 */
 			string getName() const {
 				return name;
 			}
@@ -355,11 +406,17 @@ namespace llvm {
 					GraphTraits<DFGNode *>::ChildIteratorType I,
 					  const CGRADFG *G);
 		private:
-			/// a default graph properties for DOT graph
+			/**
+			 * @brief  a default graph properties for DOT graph
+			**/
 			static StringMap<StringRef> default_graph_prop;
-			/// a default node propterties for DOT graph
+			/**
+			 * @brief  a default node propterties for DOT graph
+			**/
 			static StringMap<StringRef> default_node_prop;
-			/// a default edge propterties for DOT graph
+			/**
+			 * @brief  a default edge propterties for DOT graph
+			**/
 			static StringMap<StringRef> default_edge_prop;
 
 	};

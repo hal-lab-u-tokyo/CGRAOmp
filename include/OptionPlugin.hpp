@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:20:02
-*    Last Modified: 13-09-2021 16:51:57
+*    Last Modified: 13-09-2021 17:18:42
 */
 #ifndef OptionPlugin_H
 #define OptionPlugin_H
@@ -187,7 +187,7 @@ bool operator!=(const OptKeyValue &lhs, const OptKeyValue &rhs);
 /// non-member operator overloading for OptionValue impelentation
 bool operator==(const OptKeyValue &lhs, const OptKeyValue &rhs);
 
-/// template spetilization of OptionValue for OptKeyValue
+/// template specialization of OptionValue for OptKeyValue
 template <>
 struct OptionValue<OptKeyValue> final : OptionValueCopy<OptKeyValue> {
   using WrapperType = OptKeyValue;
@@ -205,7 +205,7 @@ private:
   void anchor() override;
 };
 
-/// template spetilization of parser for OptKeyValue
+/// template specialization of parser for OptKeyValue
 template <> class parser<OptKeyValue> : public basic_parser<OptKeyValue> {
 	public:
 		parser(Option &O) : basic_parser(O) {}
