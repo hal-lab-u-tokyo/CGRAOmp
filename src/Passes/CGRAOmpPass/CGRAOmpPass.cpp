@@ -25,15 +25,17 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 11-09-2021 18:12:13
+*    Last Modified: 13-09-2021 16:18:10
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
 #include "CGRAModel.hpp"
 #include "CGRADataFlowGraph.hpp"
+#include "OptionPlugin.hpp"
 
 #include "llvm/IR/Function.h"
 #include "llvm/ADT/Statistic.h"
+
 
 #include "llvm/IR/Instruction.h"
 
@@ -115,13 +117,14 @@ PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 			errs() << formatv("\tID {0}\n", v->getID());
 	}
 
+	dfg.setName("this is graph name");
 	if (auto E = dfg.saveAsDotGraph("graph_test.dot")) {
 		ExitOnError Exit(ERR_MSG_PREFIX);
 		Exit(std::move(E));
 	}
 
-
 //	CGRAModel hoge;
+
 	return PreservedAnalyses::all();
 }
 

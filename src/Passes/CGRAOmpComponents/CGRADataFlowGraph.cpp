@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 11-09-2021 18:04:27
+*    Last Modified: 13-09-2021 16:52:12
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -64,7 +64,7 @@ bool CGRADFG::connect(NodeType &Src, NodeType &Dst, EdgeType &E)
 
 Error CGRADFG::saveAsDotGraph(StringRef filepath)
 {
-	bool human_readable = CGRAOmp::OptDFGHumanReadable;
+	bool human_readable = CGRAOmp::OptDFGPlainNodeName;
 	// open file
 	error_code EC;
 	raw_fd_ostream File(filepath, EC, sys::fs::OpenFlags::F_Text);
@@ -90,10 +90,60 @@ Error CGRADFG::saveAsDotGraph(StringRef filepath)
 	return ErrorSuccess();
 }
 
+
+/* ============= Specilization of DotGraphTraits for CGRADFG ============= */
+
+/// currently empty
+StringMap<StringRef> CGRADFGDotGraphTraits::default_graph_prop = {
+
+};
+
+/// currently empty
+StringMap<StringRef> CGRADFGDotGraphTraits::default_node_prop = {
+
+};
+
+/// currently empty
+StringMap<StringRef> CGRADFGDotGraphTraits::default_edge_prop = {
+
+};
+
+
 string CGRADFGDotGraphTraits::getEdgeAttributes(const DFGNode *Node, 
 					GraphTraits<DFGNode *>::ChildIteratorType I,
 					  const CGRADFG *G)
 {
 	const DFGEdge *E = static_cast<const DFGEdge*>(*I.getCurrent());
 	return "";
+}
+
+string CGRADFGDotGraphTraits::getGraphProperties(const CGRADFG *G) {
+	string buf;
+	raw_string_ostream OS(buf);
+	OS << "\t//Graph Properties\n";
+	auto printer = [&](string attr_type, auto &opt_prop,
+						StringMap<StringRef> &def)
+	{
+		if (opt_prop.size() > 0) {
+			OS << formatv("\t{0}[\n", attr_type);
+			for (auto attr : opt_prop) {
+				OS << "\t\t" << attr << ";\n";
+			}
+			OS << "\t]\n";
+		} else {
+			if (def.size() > 0) {
+				OS << formatv("\t{0}[\n", attr_type);
+				for (auto &attr : def) {
+					OS << formatv("\t\t{0}={1};\n", attr.first(), attr.second);
+				}
+				OS << "\t]\n";
+			}
+		}
+	};
+
+	printer("graph", OptDFGGraphProp, default_graph_prop);
+	printer("node", OptDFGNodeProp, default_node_prop);
+	printer("edge", OptDFGEdgeProp, default_edge_prop);
+
+	return buf;
 }

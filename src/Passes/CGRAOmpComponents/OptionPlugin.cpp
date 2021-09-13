@@ -25,11 +25,15 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 11-09-2021 17:31:41
+*    Last Modified: 13-09-2021 16:52:30
 */
+
+#include "llvm/Support/CommandLine.h"
+
 #include "OptionPlugin.hpp"
 
 using namespace llvm;
+using namespace cl;
 using namespace std;
 
 cl::opt<bool> CGRAOmp::OptVerbose("cgraomp-verbose", cl::init(false), 
@@ -38,6 +42,89 @@ cl::opt<bool> CGRAOmp::OptVerbose("cgraomp-verbose", cl::init(false),
 cl::opt<string> CGRAOmp::OptDFGOpKey("cgra-dfg-op-key", cl::init("op"),
 			cl::desc("opcode key for DOT generation"), cl::value_desc("key"));
 
-cl::opt<bool> CGRAOmp::OptDFGHumanReadable("cgra-dfg-h", cl::init(false), 
-			cl::desc("Save DOT graph with human readable node name"));
+cl::opt<bool> CGRAOmp::OptDFGPlainNodeName("cgra-dfg-plain", cl::init(false), 
+			cl::desc("Use plain node names instead of pointer values for DOT generation"));
+
+cl::list<CGRAOmp::OptKeyValue> CGRAOmp::OptDFGGraphProp("cgra-dfg-graph-prop", 
+			cl::desc("Set a common perefenrece of DOT for graph"),
+			cl::value_desc("attr1=value1,attr2=value2,..."),
+			cl::CommaSeparated);
+cl::list<CGRAOmp::OptKeyValue> CGRAOmp::OptDFGNodeProp("cgra-dfg-node-prop", 
+			cl::desc("Set a common perefenrece of DOT for node"),
+			cl::value_desc("attr1=value1,attr2=value2,..."),
+			cl::CommaSeparated);
+cl::list<CGRAOmp::OptKeyValue> CGRAOmp::OptDFGEdgeProp("cgra-dfg-edge-prop", 
+			cl::desc("Set a common perefenrece of DOT for edge"),
+			cl::value_desc("attr1=value1,attr2=value2,..."),
+			cl::CommaSeparated);
+
+/**
+ * @details It parses a string based on a regular expression
+*/
+CGRAOmp::OptKeyValue::OptKeyValue(string keyvalue)
+{
+	SmallVector<string, 2> vec;
+	regex pattern("=");
+	auto it = sregex_token_iterator(keyvalue.begin(),
+									keyvalue.end(),
+									pattern, -1);
+	auto end = sregex_token_iterator();
+	while (it != end) {
+		vec.push_back(*it++);
+	}
+	if (vec.size() != 2) {
+		valid = false;
+	} else {
+		key = vec[0];
+		value = vec[1];
+		valid = true;
+	}
+}
+
+namespace llvm {
+namespace cl {
+	template class basic_parser<CGRAOmp::OptKeyValue>;
+}
+}
+
+bool operator!=(const OptKeyValue &lhs, const OptKeyValue &rhs)
+{
+	return !(lhs == rhs);
+}
+bool operator==(const OptKeyValue &lhs, const OptKeyValue &rhs)
+{
+	return ((lhs.get_key() == rhs.get_key()) &&
+				(lhs.get_value() == rhs.get_value()));
+}
+
+raw_ostream& llvm::operator<<(raw_ostream &OS, const OptKeyValue &D)
+{
+	OS << formatv("{0}={1}", D.get_key(), D.get_value());
+	return OS;
+}
+
+void OptionValue<CGRAOmp::OptKeyValue>::anchor() {}
+void parser<CGRAOmp::OptKeyValue>::anchor() {}
+
+static const size_t MaxOptWidth = 8;
+void parser<CGRAOmp::OptKeyValue>::printOptionDiff(const Option &O,
+					const OptVal &V, const OptVal &D,
+					size_t GlobalWidth) const
+{
+	printOptionName(O, GlobalWidth);
+	std::string Str;
+	{
+		raw_string_ostream SS(Str);
+		SS << V.getValue();
+	}
+	outs() << "= " << Str;
+	size_t NumSpaces = MaxOptWidth > Str.size() ?
+							MaxOptWidth - Str.size() : 0;
+	outs().indent(NumSpaces) << " (default: ";
+
+	if (D.hasValue()) outs() << D.getValue();
+	else outs() << "*no default*";
+
+	outs() << ")\n";
+}
 

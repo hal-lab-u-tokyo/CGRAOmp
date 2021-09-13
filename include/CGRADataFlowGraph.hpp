@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 11-09-2021 18:05:47
+*    Last Modified: 13-09-2021 16:48:42
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -34,6 +34,7 @@
 #include "llvm/ADT/DirectedGraph.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringMap.h"
 
 #include "CGRAInstMap.hpp"
 
@@ -43,6 +44,7 @@ using namespace std;
 
 #define VROOT_NODE_ID (-1)
 
+
 namespace llvm {
 	class DFGNode;
 	class DFGEdge;
@@ -50,6 +52,10 @@ namespace llvm {
 	using DFGEdgeBase = DGEdge<DFGNode, DFGEdge>;
 	using CGRADFGBase = DirectedGraph<DFGNode, DFGEdge>;
 
+	/**
+	 * @class DFGNode
+	 * @brief An abstract class for DFG node derived from DGNode
+	*/
 	class DFGNode : public DFGNodeBase {
 		public:
 			enum class NodeKind {
@@ -90,6 +96,10 @@ namespace llvm {
 			InstMapEntry *map_entry;
 	};
 
+	/**
+	 * @class VirtualRootNode
+	 * @brief A concrete class for virtual root node, connected to all the primary input node.
+	*/
 	class VirtualRootNode : public DFGNode {
 		public:
 			VirtualRootNode() :
@@ -100,6 +110,10 @@ namespace llvm {
 			}
 	};
 
+	/**
+	 * @class ComputeNode
+	 * @brief A concrete class for computational nodes
+	*/
 	class ComputeNode : public DFGNode {
 		public:
 			ComputeNode(int ID, InstMapEntry *map_entry) : 
@@ -112,6 +126,10 @@ namespace llvm {
 
 	};
 
+	/**
+	 * @class DFGEdge
+	 * @brief Class of DFG edge derived from DGEdge
+	*/
 	class DFGEdge : public DFGEdgeBase {
 		public:
 			DFGEdge(DFGNode &N) : DFGEdgeBase(N) {}
@@ -134,6 +152,10 @@ namespace llvm {
 		private:
 	};
 
+	/**
+	 * @class CGRADFG
+	 * @brief A graph class for CGRA kernel DFG derived from DirectedGraph
+	 */
 	class CGRADFG : public CGRADFGBase {
 		public:
 			using NodeType = DFGNode;
@@ -151,6 +173,10 @@ namespace llvm {
 				createVirtualRoot();
 			};
 
+			~CGRADFG() {
+				delete virtual_root;
+			}
+
 			NodeType &getRoot() const {
 				return *virtual_root;
 			}
@@ -163,6 +189,14 @@ namespace llvm {
 
 			Error saveAsDotGraph(StringRef filepath);
 
+			void setName(const string graph_name) {
+				name = graph_name;
+			}
+
+			string getName() const {
+				return name;
+			}
+
 		private:
 
 			void createVirtualRoot() {
@@ -170,9 +204,14 @@ namespace llvm {
 				CGRADFGBase::addNode(*virtual_root);
 			}
 			NodeType *virtual_root = nullptr;
+
+			string name = "";
 	};
 
-
+	/**
+	 * @class GraphTraits<DFGNode *>
+	 * @brief Specilized template of GraphTraits for DFNode
+	 */
 	template <>
 	struct GraphTraits<DFGNode *> {
 		using NodeRef = DFGNode *;
@@ -201,6 +240,10 @@ namespace llvm {
 		}
 	};
 
+	/**
+	 * @class GraphTraits<DFGNode *>
+	 * @brief Specilized template of GraphTraits for DFNode
+	 */
 	template <>
 	struct GraphTraits<CGRADFG *> : public GraphTraits<DFGNode*> {
 		using nodes_iterator = CGRADFG::iterator;
@@ -215,6 +258,10 @@ namespace llvm {
 		}
 	};
 
+	/**
+	 * @class GraphTraits<const DFGNode *>
+	 * @brief Specilized template  of GraphTraits for const DFNode
+	 */
 	template <>
 	struct GraphTraits<const DFGNode *> {
 		using NodeRef = const DFGNode *;
@@ -243,6 +290,10 @@ namespace llvm {
 		}
 	};
 
+	/**
+	 * @class GraphTraits<const CGRADFG *>
+	 * @brief Specilized template of GraphTraits for const CGRADFG
+	 */
 	template <>
 	struct GraphTraits<const CGRADFG *> : public GraphTraits<DFGNode*> {
 		using nodes_iterator = CGRADFG::const_iterator;
@@ -257,7 +308,11 @@ namespace llvm {
 		}
 	};
 
-
+	/**
+	 * @class DOTGraphTraits<const CGRADFG *>
+	 * @brief Specilized template of DotGraphTraits for CGRADFG
+	 * This is needed to save CGRADFG as DOT graph file.
+	 */
 	template<>
 	struct DOTGraphTraits<const CGRADFG *> : public DefaultDOTGraphTraits {
 		public:
@@ -265,15 +320,10 @@ namespace llvm {
 			DOTGraphTraits() : DefaultDOTGraphTraits(false) {};
 
 			string getGraphName(const CGRADFG *G) {
-				return "This is CGRADFG name";
+				return G->getName();
 			}
 
-			static string getGraphProperties(const CGRADFG *G) {
-				return "\t//Graph Properties\n"
-						"\tgraph [\n"
-						"\t\tbgcolor = \"gray\"\n"
-						"\t];";
-			}
+			static string getGraphProperties(const CGRADFG *G);
 
 			static bool isNodeHidden(const DFGNode *Node, 
 								const CGRADFG *G) {
@@ -288,7 +338,7 @@ namespace llvm {
 
 			static string getNodeIdentifierLabel(const DFGNode *Node, 
 								const CGRADFG *G) {
-				return formatv("ID_{0}", Node->getID());
+				return "";
 			}
 
 			static string getNodeDescription(const DFGNode *Node, 
@@ -304,6 +354,13 @@ namespace llvm {
 			static string getEdgeAttributes(const DFGNode *Node, 
 					GraphTraits<DFGNode *>::ChildIteratorType I,
 					  const CGRADFG *G);
+		private:
+			/// a default graph properties for DOT graph
+			static StringMap<StringRef> default_graph_prop;
+			/// a default node propterties for DOT graph
+			static StringMap<StringRef> default_node_prop;
+			/// a default edge propterties for DOT graph
+			static StringMap<StringRef> default_edge_prop;
 
 	};
 
