@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:30
-*    Last Modified: 09-09-2021 20:23:50
+*    Last Modified: 14-09-2021 13:45:10
 */
 #ifndef CGRAModel_H
 #define CGRAModel_H
@@ -34,6 +34,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
@@ -41,6 +42,21 @@
 #include "CGRAInstMap.hpp"
 
 #include <string>
+#include <climits>
+
+// Key setting to parse the JSON object
+#define CATEGORY_KEY 	"category"
+#define AG_CONF_KEY		"address_generator"
+#define AG_STYLE_KEY	"control"
+#define AG_MAX_NEST_KEY	"max_nested_level"
+#define COND_STYLE_KEY	"conditional"
+#define IDP_STYLE_KEY	"inter-loop-dependency"
+#define OPT_ENABLE_KEY	"allowed"
+#define OPT_TYPE_KEY	"type"
+#define CUSTOM_INST_KEY	"custom_instructions"
+#define GEN_INST_KEY	"generic_instructions"
+#define INST_MAP_KEY	"instruction_map"
+
 
 
 using namespace llvm;
@@ -145,6 +161,15 @@ namespace CGRAOmp
 			 */
 			InstMapEntry* isSupported(Instruction *I);
 
+			template <typename DerivedT>
+			DerivedT* asDerived() {
+				return dyn_cast<DerivedT>(this);
+			}
+
+			CGRACategory getKind() const {
+				return category;
+			}
+
 		protected:
 			StringRef filename;
 			ConditionalStyle cond;
@@ -152,7 +177,36 @@ namespace CGRAOmp
 			CGRACategory category;
 			InstMap inst_map;
 
+	};
 
+	/**
+	 * @class AddressGenerator
+	 * @brief An abstract class representing a type of address generator
+	 */
+	class AddressGenerator {
+		public:
+			enum class Kind {
+				Affine,
+				FullState,
+			};
+
+			AddressGenerator() = delete;
+			explicit AddressGenerator(Kind kind) : kind(kind) {};
+			AddressGenerator(const AddressGenerator &AG) = default;
+			AddressGenerator(AddressGenerator &&) = default;
+
+
+			Kind getKind() const {
+				return kind;
+			}
+
+			template <typename DerivedT>
+			DerivedT* asDerived() {
+				return dyn_cast<DerivedT>(this);
+			}
+
+		private:
+			Kind kind;
 	};
 
 	/**
@@ -168,12 +222,95 @@ namespace CGRAOmp
 			 * @param cond conditional style of the CGRA
 			 * @param inter_loop_dep ability to handle inter loop dependency
 			 */
-			DecoupledCGRA(StringRef filename, ConditionalStyle cond,
-							InterLoopDep inter_loop_dep) :
+			DecoupledCGRA(StringRef filename, AddressGenerator *foo,
+							ConditionalStyle cond, InterLoopDep inter_loop_dep) :
 				CGRAModel(filename, CGRACategory::Decoupled,
-							cond, inter_loop_dep) {};
+							cond, inter_loop_dep), AG(foo) {};
+
+			/// copy constructor
+			DecoupledCGRA(const DecoupledCGRA&);
+
+			/// destructor
+			~DecoupledCGRA() {
+				delete AG;
+			}
+
+			/**
+			 * @brief get the address generator
+			 * 
+			 * @return a pointer to the AddressGenerator instance
+			 */
+			AddressGenerator* getAG() const {
+				return AG;
+			}
+
+			/// for downcasting from CGRAModel by llvm::dyn_cast
+			static bool classof(const CGRAModel *M) {
+				return M->getKind() == CGRACategory::Decoupled;
+			}
+		private:
+			AddressGenerator *AG;
+
+	};
+
+	/**
+	 * @class AffineAG
+	 * @brief A model of address generator compatible to memory access with affine expression
+	 * the accessed memory address must be expressed in 
+	 *  @f[
+	 * C_0 + C_1x + C_2y + C_3z...
+	 * @f]
+	 * where @f$ x, y, z... @f$ are loop variable and @f$ C_0, C_1, ... @f$ are constants.
+	 */
+	class AffineAG : public AddressGenerator {
+		using AG = AddressGenerator;
+		public:
+			/**
+			 * @brief Default constructor without any limitation about the nested level
+			 */
+			AffineAG() : AG(AG::Kind::Affine) {
+				max_nests = INT_MAX;
+			}
+			/**
+			 * @brief Construct a new AffineAG object
+			 * 
+			 * @param max_nests maximum nested level to be allowed
+			 */
+			explicit AffineAG(int max_nests) : AG(AG::Kind::Affine),
+				max_nests(max_nests) {};
+
+			/// copy constructor
+			AffineAG(const AffineAG&);
+
+			/**
+			 * @brief Get the maximum nested level supported by this AddressGenerator
+			 */
+			int getMaxNests() const {
+				return max_nests;
+			}
+
+			/// for downcasting from AddressGenerator by llvm::dyn_cast
+			static bool classof(const AG *ag) {
+				return ag->getKind() == Kind::Affine;
+			}
 
 		private:
+			int max_nests;
+	};
+
+	/**
+	 * @class FullStateAG
+	 * @brief a model of address generator without any constraints
+	 */
+	class FullStateAG : public AddressGenerator {
+		using AG = AddressGenerator;
+		public:
+			/// copy constructor
+			FullStateAG(const FullStateAG&);
+			/// for downcasting from AddressGenerator by llvm::dyn_cast
+			static bool classof(const AG *ag) {
+				return ag->getKind() == Kind::FullState;
+			}
 	};
 
 	/**
@@ -182,10 +319,22 @@ namespace CGRAOmp
 	*/
 	class GenericCGRA : public CGRAModel {
 		public:
-			GenericCGRA(StringRef filename) :
+			/**
+			 * @brief Construct a new Generic CGRA object
+			 * 
+			 * @param filename filename of the config file
+			 */
+			explicit GenericCGRA(StringRef filename) :
 				CGRAModel(filename, CGRACategory::Generic,
 							ConditionalStyle::No,
 							InterLoopDep::No) {}
+			GenericCGRA(const GenericCGRA &);
+
+			/// for downcasting from CGRAModel by llvm::dyn_cast
+			static bool classof(const CGRAModel *M) {
+				return M->getKind() == CGRAModel::CGRACategory::Generic;
+			}
+
 		private:
 	};
 
@@ -236,7 +385,7 @@ namespace CGRAOmp
 			 */
 			ModelError(StringRef filename, std::pair<StringRef,StringRef> config) :
 				filename(filename), errtype(ErrorType::NoImplemented),
-				error_key(config.first), error_val(config.second) {};
+				error_key(config.first), error_val(config.second.str()) {};
 
 			/**
 			 * @brief Construct a new ModelError when a value is invalid for the specified key
@@ -296,7 +445,7 @@ namespace CGRAOmp
 			std::string json_val = "";
 			StringRef filename;
 			StringRef error_key;
-			StringRef error_val;
+			std::string error_val;
 			StringRef exptected_type;
 			StringRef region = "";
 			SmallVector<StringRef> valid_values;
@@ -311,7 +460,7 @@ namespace CGRAOmp
 	 * @param filepath filepath to the JSON config file
 	 * @return Expected<CGRAModel> CGRAModel if there is no error. Otherwise, it contains ModelError
 	 */
-	Expected<CGRAModel> parseCGRASetting(StringRef filepath);
+	Expected<CGRAModel*> parseCGRASetting(StringRef filepath);
 
 	/**
 	 * @brief a template to extract only values from SettingMap
@@ -360,7 +509,27 @@ namespace CGRAOmp
 											StringRef filename,
 											StringMap<SettingT> settingMap);
 
+	/**
+	 * @brief parse a JSON config and instantiate AddressGenerator
+	 * 
+	 * @param json_obj parsed JSON config
+	 * @param filename filename of JSON config (just for error message)
+	 * @return Expected<AddressGenerator*> a pointer to the generated AddressGenerator instance if there is no error. Otherwise, it contains ModelError
+	 */
+	Expected<AddressGenerator*> parseAGConfig(json::Object *json_obj,
+												StringRef filename);
 
+	/**
+	 * @brief Create a AffineAG object according to JSON config
+	 * 
+	 * @param json_obj parsed JSON config
+	 * @param filename filename of JSON config (just for error message)
+	 * @return Expected<AddressGenerator*> a pointer to the generated AddressGenerator instance if there is no error. Otherwise, it contains ModelError
+	 */
+	Expected<AddressGenerator*>  createAffineAG(json::Object *json_obj,
+												StringRef filename);
+
+	using AGGen_t = std::function<Expected<AddressGenerator*>(json::Object*,StringRef)>;
 
 } // namespace CGRAOmp
 

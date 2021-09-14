@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:46
-*    Last Modified: 10-09-2021 11:46:50
+*    Last Modified: 14-09-2021 01:31:11
 */
 #include "CGRAModel.hpp"
 
@@ -38,6 +38,10 @@
 using namespace llvm;
 using namespace CGRAOmp;
 using namespace std;
+
+static StringMap<AGGen_t> AG_gen({
+	std::make_pair("affine", createAffineAG),
+});
 
 /* ===================== Implementation of ModelError ===================== */
 char ModelError::ID = 0;
@@ -60,8 +64,10 @@ void ModelError::log(raw_ostream &OS) const
 		case ErrorType::InvalidValue:
 			OS << formatv("Invalid data \"{0}\" for {1}",
 				 error_val, error_key);
-			after_str = formatv("available values: {0}",
+			if (valid_values.size() > 0) {
+				after_str = formatv("available values: {0}",
 					 make_range(valid_values.begin(), valid_values.end()));
+			}
 			break;
 		case ErrorType::NoImplemented:
 			OS << formatv("Currently, configuring {0} for {1} is not implemented", error_val, error_key);
@@ -79,7 +85,7 @@ ModelError::ModelError(StringRef filename, StringRef key, StringRef val,
 					filename(filename),
 					errtype(ErrorType::InvalidValue),
 					error_key(key),
-					error_val(val)
+					error_val(val.str())
 {
 	valid_values.clear();
 	for (auto v : list) {
@@ -110,7 +116,7 @@ Expected<CGRAModel::CGRACategory> CGRAOmp::getCategory(json::Object *json_obj,
 												StringRef filename)
 {
 	CGRAModel::CGRACategory cgra_cat;
-	if (auto *category = json_obj->get("category")) {
+	if (auto *category = json_obj->get(CATEGORY_KEY)) {
 		auto cat_val = category->getAsString();
 		if (cat_val.hasValue()) {
 			if (containsValidData(CGRAModel::CategoryMap,
@@ -119,24 +125,24 @@ Expected<CGRAModel::CGRACategory> CGRAOmp::getCategory(json::Object *json_obj,
 			} else {
 				// invalid value
 				return make_error<ModelError>(filename,
-											"category", cat_val.getValue(),
+											CATEGORY_KEY, cat_val.getValue(),
 						get_setting_values(CGRAModel::CategoryMap));
 			}
 		} else {
 			//not string data
-			return make_error<ModelError>(filename, "category", "string",
+			return make_error<ModelError>(filename, CATEGORY_KEY, "string",
 											category);
 		}
 	} else {
 		//missing category
-		return make_error<ModelError>(filename, "category");
+		return make_error<ModelError>(filename, CATEGORY_KEY);
 	}
 	return cgra_cat;
 }
 
 
-char conditional_key[] = "conditional";
-char interloopdep_key[] = "inter-loop_dependency";
+char conditional_key[] = COND_STYLE_KEY;
+char interloopdep_key[] = IDP_STYLE_KEY;
 
 
 /**
@@ -169,42 +175,42 @@ Expected<SettingT> CGRAOmp::getOption(json::Object *json_obj,
 	if (auto *cond = json_obj->get(key_str)) {
 		auto cond_obj = cond->getAsObject();
 		// get allowed or not allowed
-		if (cond_obj->get("allowed")) {
-			auto isAllowed = cond_obj->get("allowed")->getAsBoolean();
+		if (cond_obj->get(OPT_ENABLE_KEY)) {
+			auto isAllowed = cond_obj->get(OPT_ENABLE_KEY)->getAsBoolean();
 			if (isAllowed.hasValue()) {
 				if (!isAllowed.getValue()) {
 					return SettingT::No;
 				}
 			} else {
 				// not bool type
-				return make_model_error("allowed", "bool", 
-								cond_obj->get("allowed"));
+				return make_model_error(OPT_ENABLE_KEY, "bool", 
+								cond_obj->get(OPT_ENABLE_KEY));
 			}
 		} else {
 			// missing allowed
-			return make_model_error("allowed");
+			return make_model_error(OPT_ENABLE_KEY);
 		}
 
 		// in the case of conditional allowed
-		if (cond_obj->get("type")) {
-			auto t_str = cond_obj->get("type")->getAsString();
+		if (cond_obj->get(OPT_TYPE_KEY)) {
+			auto t_str = cond_obj->get(OPT_TYPE_KEY)->getAsString();
 			if (t_str.hasValue()) {
 				if (containsValidData(settingMap,
 										t_str.getValue())) {
 					style = settingMap[t_str.getValue()];
 				} else {
 					// invalid data
-					return make_model_error("type", t_str.getValue(),
+					return make_model_error(OPT_TYPE_KEY, t_str.getValue(),
 								get_setting_values(settingMap));
 				}
 			} else {
 				// not string type
-				return make_model_error("type", "string", 
-								cond_obj->get("type"));
+				return make_model_error(OPT_TYPE_KEY, "string", 
+								cond_obj->get(OPT_TYPE_KEY));
 			}
 		} else {
 			// missing style
-			return make_model_error("type");
+			return make_model_error(OPT_TYPE_KEY);
 		}
 	} else {
 		//missing conditional
@@ -214,8 +220,82 @@ Expected<SettingT> CGRAOmp::getOption(json::Object *json_obj,
 	return style;
 }
 
+Expected<AddressGenerator*> CGRAOmp::parseAGConfig(json::Object *json_obj,
+												StringRef filename)
+{
+	auto make_model_error = [&](auto... args) {
+		auto EI = std::make_unique<ModelError>(filename, args...);
+		EI->setRegion(AG_CONF_KEY);
+		return Error(std::move(EI));
+	};
 
-Expected<CGRAModel> CGRAOmp::parseCGRASetting(StringRef filename)
+	if (json_obj->get(AG_CONF_KEY)) {
+		auto *conf_obj = json_obj->get(AG_CONF_KEY)->getAsObject();
+		// get AG style
+		StringRef style_str;
+		if (conf_obj->get(AG_STYLE_KEY)) {
+			auto style = conf_obj->get(AG_STYLE_KEY)->getAsString();
+			if (style.hasValue()) {
+				style_str = *style;
+			} else {
+				return make_model_error(AG_STYLE_KEY, "string",
+										conf_obj->get(AG_STYLE_KEY));
+			}
+		} else {
+			// missing AG style setting
+			return make_model_error(AG_STYLE_KEY);
+		}
+		if (AG_gen.find(style_str) != AG_gen.end()) {
+			if (auto AG = AG_gen[style_str](conf_obj, filename)) {
+				return *AG;
+			} else {
+				return AG.takeError();
+			}
+
+		} else {
+			// unknown type for AG style
+			return make_model_error(AG_STYLE_KEY, style_str,
+						get_setting_values(AG_gen));
+		}
+
+	} else {
+		//missing address generator
+		return make_error<ModelError>(filename, AG_CONF_KEY);
+	}
+}
+Expected<AddressGenerator*> CGRAOmp::createAffineAG(json::Object *json_obj,
+												StringRef filename)
+{
+	auto make_model_error = [&](auto... args) {
+		auto EI = std::make_unique<ModelError>(filename, args...);
+		EI->setRegion(AG_CONF_KEY);
+		return Error(std::move(EI));
+	};
+
+	// get max nested level
+	if (json_obj->get(AG_MAX_NEST_KEY)) {
+		auto max_nests = json_obj->get(AG_MAX_NEST_KEY)->getAsInteger();
+		if (max_nests.hasValue()) {
+			if (*max_nests > 0) {
+				return new AffineAG(*max_nests);
+			} else {
+				// negative integer
+				return make_model_error(AG_MAX_NEST_KEY, to_string(*max_nests),
+										ArrayRef<StringRef>({}));
+			}
+		} else {
+			// not integer
+			return make_model_error(AG_MAX_NEST_KEY, "integer",
+								json_obj->get(AG_MAX_NEST_KEY));
+		}
+	} else {
+		// missing max nested level setting
+		// consider there is no limitation regarding the nested level
+		return new AffineAG();
+	}
+}
+
+Expected<CGRAModel*> CGRAOmp::parseCGRASetting(StringRef filename)
 {
 	//open json file
 	error_code fopen_ec;
@@ -267,20 +347,29 @@ Expected<CGRAModel> CGRAOmp::parseCGRASetting(StringRef filename)
 	// instantiate an actual class of model
 	switch (*cgra_cat) {
 		case CGRAModel::CGRACategory::Decoupled:
-			model = new DecoupledCGRA(filename, *cond_type, *ild_type);
+			{
+				auto AG = parseAGConfig(top_obj, filename);
+				if (AG) {
+					model = new DecoupledCGRA(filename, *AG,
+												*cond_type, *ild_type);
+					model->asDerived<DecoupledCGRA>()->getAG()->getKind();
+				} else {
+					return AG.takeError();
+				}
+			}
 			break;
 		case CGRAModel::CGRACategory::Generic:
 			model = new GenericCGRA(filename);
 			break;
 		default:
-			auto config = make_pair<StringRef, StringRef>("category",
-					top_obj->get("category")->getAsString().getValue());
+			auto config = make_pair<StringRef, StringRef>(CATEGORY_KEY,
+					top_obj->get(CATEGORY_KEY)->getAsString().getValue());
 			return make_error<ModelError>(filename,	config);
 	}
 
 
 	// add supported instructions
-	auto inst_list = getStringArray(top_obj, "generic_instructions", filename);
+	auto inst_list = getStringArray(top_obj, GEN_INST_KEY, filename);
 	if (!inst_list) {
 		return inst_list.takeError();
 	} else {
@@ -293,7 +382,7 @@ Expected<CGRAModel> CGRAOmp::parseCGRASetting(StringRef filename)
 	}
 
 	// add custom instructions
-	auto cust_list = getStringArray(top_obj, "custom_instructions", filename);
+	auto cust_list = getStringArray(top_obj, CUSTOM_INST_KEY, filename);
 	if (!cust_list) {
 		return cust_list.takeError();
 	} else {
@@ -303,8 +392,8 @@ Expected<CGRAModel> CGRAOmp::parseCGRASetting(StringRef filename)
 	}
 
 	// add instruction mapping (optional)
-	if (top_obj->get("instruction_map")) {
-		auto inst_map_obj = top_obj->get("instruction_map")->getAsArray();
+	if (top_obj->get(INST_MAP_KEY)) {
+		auto inst_map_obj = top_obj->get(INST_MAP_KEY)->getAsArray();
 		for (auto entry : *inst_map_obj) {
 			auto map_cond = createMapCondition(entry.getAsObject(), filename);
 			if (!map_cond) {
@@ -318,8 +407,7 @@ Expected<CGRAModel> CGRAOmp::parseCGRASetting(StringRef filename)
 		}
 	}
 
-
-	return std::move(*model);
+	return model;
 }
 
 
@@ -365,4 +453,35 @@ Error CGRAModel::add_map_entry(StringRef opcode, MapCondition *map_cond)
 InstMapEntry* CGRAModel::isSupported(Instruction *I)
 {
 	return inst_map.find(I);
+}
+
+/* ======= Implementation of DecoupleCGRA and replated classes ======= */
+DecoupledCGRA::DecoupledCGRA(const DecoupledCGRA &rhs) : 
+	CGRAModel(rhs)
+{
+	using AGKind = AddressGenerator::Kind;
+	// copy as an actual derived class
+	switch(rhs.getAG()->getKind()) {
+		case AGKind::Affine:
+			AG = new AffineAG(*(rhs.AG->asDerived<AffineAG>()));
+			break;
+		case AGKind::FullState:
+			AG = new FullStateAG(*(rhs.AG->asDerived<FullStateAG>()));
+			break;
+	}
+}
+
+GenericCGRA::GenericCGRA(const GenericCGRA &rhs) : CGRAModel(rhs)
+{
+	assert(!"Copy constructor for GenericCGRA is not implemented");
+}
+
+AffineAG::AffineAG(const AffineAG& rhs) : AddressGenerator(rhs)
+{
+	max_nests = rhs.max_nests;
+}
+
+FullStateAG::FullStateAG(const FullStateAG &rhs) : AddressGenerator(rhs)
+{
+	assert(!"Copy constructor for FullStateAG is not implemented");
 }

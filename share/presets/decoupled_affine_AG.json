@@ -7,7 +7,7 @@
 	"conditional" : {
 		"allowed": false
 	},
-	"inter-loop_dependency": {
+	"inter-loop-dependency": {
 		"allowed": true,
 		"type": "generic"
 	},
@@ -18,7 +18,7 @@
 	],
 	"instruction_map": [
 		{ "inst": "xor", "rhs": {"ConstantInt" : -1}, "map": "not"},
-		{ "inst": "xor", "map": "xor"},
+		{ "inst": "xor", "map": "other_xor"},
 		{ "inst": "fsin", "rhs": {"ConstantDouble": 0.1 }, "map": "fsin0p1"},
 		{ "inst": "fsin", "map": "fsin"}
 	]

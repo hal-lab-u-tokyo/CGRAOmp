@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 11-09-2021 17:32:20
+*    Last Modified: 13-09-2021 18:26:13
 */
 
 #include "CGRAInstMap.hpp"
@@ -463,26 +463,27 @@ Expected<pair<StringRef,MapCondition*>>  CGRAOmp::createMapCondition(json::Objec
 	};
 	//get necessary items
 	StringRef target_inst;
-	if (json_obj->get("inst")) {
-		auto inst_str = json_obj->get("inst")->getAsString();
+	if (json_obj->get(INST_KEY)) {
+		auto inst_str = json_obj->get(INST_KEY)->getAsString();
 		if (inst_str.hasValue()) {
 			target_inst = inst_str.getValue();
 		} else {
-			return make_model_error("inst", "string", json_obj->get("inst"));
+			return make_model_error(INST_KEY, "string",
+									 json_obj->get(INST_KEY));
 		}
 	} else {
-		return make_model_error("inst");
+		return make_model_error(INST_KEY);
 	}
 	StringRef map_name;
-	if (json_obj->get("map")) {
-		auto map_str = json_obj->get("map")->getAsString();
+	if (json_obj->get(MAP_KEY)) {
+		auto map_str = json_obj->get(MAP_KEY)->getAsString();
 		if (map_str.hasValue()) {
 			map_name = map_str.getValue();
 		} else {
-			return make_model_error("map", "string", json_obj->get("map"));
+			return make_model_error(MAP_KEY, "string", json_obj->get(MAP_KEY));
 		}
 	} else {
-		return make_model_error("map");
+		return make_model_error(MAP_KEY);
 	}
 
 
@@ -498,7 +499,7 @@ Expected<pair<StringRef,MapCondition*>>  CGRAOmp::createMapCondition(json::Objec
 		}
 	};
 	// get flag condition
-	auto flags = getStringArray(json_obj, "flags", filename);
+	auto flags = getStringArray(json_obj, FLAGS_KEY, filename);
 	if (!flags) {
 		auto unhandledErr = handleErrors(
 			std::move(flags.takeError()),
@@ -510,48 +511,50 @@ Expected<pair<StringRef,MapCondition*>>  CGRAOmp::createMapCondition(json::Objec
 		}
 	}
 	// get pred condition
-	if (json_obj->get("pred")) {
-		auto pred_str = json_obj->get("pred")->getAsString();
+	if (json_obj->get(PRED_KEY)) {
+		auto pred_str = json_obj->get(PRED_KEY)->getAsString();
 		if (pred_str.hasValue()) {
 			if (auto E = map_cond->setPred(pred_str.getValue())) {
 				return std::move(E);
 			}
 		} else {
-			return make_model_error("inst", "string", json_obj->get("pred"));
+			return make_model_error(INST_KEY, "string",
+									json_obj->get(PRED_KEY));
 		}
 	}
 
 	// get constant operand condition
 	auto setConst = [&,ptr = move(map_cond)](json::Object *obj, bool isLeft) mutable -> Error {
-		if (obj->get("ConstantInt")) {
-			auto ci = obj->get("ConstantInt")->getAsInteger();
+		if (obj->get(CONST_INT_KEY)) {
+			auto ci = obj->get(CONST_INT_KEY)->getAsInteger();
 			if (ci.hasValue()) {
 				ptr->setConst(int(ci.getValue()), isLeft);
 			} else {
-				return make_model_error("ConstantInt", "Integer",
-									obj->get("ConstantInt"));
+				return make_model_error(CONST_INT_KEY, "Integer",
+									obj->get(CONST_INT_KEY));
 			}
-		} else if (obj->get("ConstantDouble")) {
-			auto cd = obj->get("ConstantDouble")->getAsNumber();
+		} else if (obj->get(CONST_DBL_KEY)) {
+			auto cd = obj->get(CONST_DBL_KEY)->getAsNumber();
 			if (cd.hasValue()) {
 				ptr->setConst(cd.getValue(), isLeft);
 			} else {
-				return make_model_error("ConstantDouble", "Integer",
-									obj->get("ConstantDouble"));
+				return make_model_error(CONST_DBL_KEY, "Integer",
+									obj->get(CONST_DBL_KEY));
 			}
 		}
 		return ErrorSuccess();
 	};
 
 	bool lhs_en = false;
-	if (json_obj->get("lhs")) {
-		if (auto E = setConst(json_obj->get("lhs")->getAsObject(), true)) {
+	if (json_obj->get(CONST_LHS_KEY)) {
+		if (auto E = setConst(json_obj->get(CONST_LHS_KEY)->getAsObject(),
+								true)) {
 			return std::move(E);
 		}
 		lhs_en = true;
 	}
 
-	if (json_obj->get("rhs")) {
+	if (json_obj->get(CONST_RHS_KEY)) {
 		if (lhs_en) {
 			// both left and right hand side are specified, so ignore right
 			if (OptVerbose) {
@@ -559,7 +562,8 @@ Expected<pair<StringRef,MapCondition*>>  CGRAOmp::createMapCondition(json::Objec
 				"both left and right hand side condition is specified for an instruction mapping for {0}. So, one for the right hand side is ignored\n", target_inst);
 			}
 		} else {
-			if (auto E = setConst(json_obj->get("rhs")->getAsObject(), false)) {
+			if (auto E = setConst(json_obj->get(CONST_RHS_KEY)->getAsObject(),
+									 false)) {
 				return std::move(E);
 			}
 		}

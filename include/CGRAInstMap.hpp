@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:35:11
-*    Last Modified: 11-09-2021 18:03:49
+*    Last Modified: 14-09-2021 01:41:02
 */
 
 #ifndef CGRAInstMap_H
@@ -81,6 +81,16 @@
 		return make_shared<MemoryOpMapEntry>(OPCODE, Instruction::MemoryOps::OPENUM); \
 	}\
 })
+
+// Key setting to parse the JSON object
+#define INST_KEY		"inst"
+#define MAP_KEY			"map"
+#define CONST_RHS_KEY	"rhs"
+#define CONST_LHS_KEY	"lhs"
+#define FLAGS_KEY		"flags"
+#define PRED_KEY		"pred"
+#define CONST_INT_KEY	"ConstantInt"
+#define CONST_DBL_KEY	"ConstantDouble"
 
 #define VEC_MAKE_RANGE(VEC) (make_range(VEC.begin(), VEC.end()))
 

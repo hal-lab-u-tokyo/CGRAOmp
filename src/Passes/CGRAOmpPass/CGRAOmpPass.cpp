@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 13-09-2021 16:18:10
+*    Last Modified: 14-09-2021 01:52:49
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
@@ -50,14 +50,6 @@ STATISTIC(num_dfg, "the number of extracted DFGs");
 PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 {
 	errs() << "CGRAOmpPass is called\n";
-
-	auto model = parseCGRASetting("share/presets/decoupled_affine_AG.json");
-	if (model) {
-
-	} else {
-		ExitOnError Exit(ERR_MSG_PREFIX);
-		Exit(std::move(model.takeError()));
-	}
 
 	for (auto &F : M) {
 		errs() << F.getName() << "\n";
@@ -123,6 +115,7 @@ PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
 		Exit(std::move(E));
 	}
 
+
 //	CGRAModel hoge;
 
 	return PreservedAnalyses::all();
@@ -139,8 +132,15 @@ llvmGetPassPluginInfo() {
 			PB.registerPipelineParsingCallback(
 				[](StringRef Name, ModulePassManager &PM,
 					ArrayRef<PassBuilder::PipelineElement>){
-						if(Name == "cgraomp"){
-							PM.addPass(CGRAOmpPass());
+						if (Name == "cgraomp") {
+							auto model = parseCGRASetting(
+								PathToCGRAConfig
+							);
+							if (!model) {
+								ExitOnError Exit(ERR_MSG_PREFIX);
+								Exit(std::move(model.takeError()));
+							}
+							PM.addPass(CGRAOmpPass(*model));
 							return true;
 						}
 						return false;

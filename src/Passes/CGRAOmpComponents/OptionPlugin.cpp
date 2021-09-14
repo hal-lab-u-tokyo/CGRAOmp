@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 13-09-2021 16:52:30
+*    Last Modified: 14-09-2021 01:54:47
 */
 
 #include "llvm/Support/CommandLine.h"
@@ -35,6 +35,13 @@
 using namespace llvm;
 using namespace cl;
 using namespace std;
+
+cl::opt<string> CGRAOmp::PathToCGRAConfig("cgra-model",
+			cl::init("model.json"), cl::desc("Path to CGRA config file"),
+			cl::value_desc("<filepath>"));
+
+cl::alias CGRAOmp::PathToCGRAConfigAlias("cm",
+			cl::aliasopt(CGRAOmp::PathToCGRAConfig));
 
 cl::opt<bool> CGRAOmp::OptVerbose("cgraomp-verbose", cl::init(false), 
 			cl::desc("Enables verbose output for CGRAOmp"));

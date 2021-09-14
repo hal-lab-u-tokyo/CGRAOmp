@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:20:02
-*    Last Modified: 13-09-2021 17:18:42
+*    Last Modified: 14-09-2021 01:55:22
 */
 #ifndef OptionPlugin_H
 #define OptionPlugin_H
@@ -157,6 +157,11 @@ namespace CGRAOmp
 			string key;
 			string value;
 	};
+
+	/// path to model config
+	extern cl::opt<string> PathToCGRAConfig;
+	/// alias of config file path
+	extern cl::alias PathToCGRAConfigAlias;
 
 	/// a verbose option
 	extern cl::opt<bool> OptVerbose;

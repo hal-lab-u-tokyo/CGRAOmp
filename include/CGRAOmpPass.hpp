@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 08-09-2021 18:26:25
+*    Last Modified: 14-09-2021 01:44:19
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -34,6 +34,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
+
+#include "CGRAModel.hpp"
 
 
 #include <system_error>
@@ -46,9 +48,10 @@ namespace CGRAOmp {
 
 	class CGRAOmpPass : public PassInfoMixin<CGRAOmpPass> {
 		public:
+			explicit CGRAOmpPass(CGRAModel* model) : model(model) {};
 			PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 		private:
-
+			CGRAModel *model;
 	};
 
 	
