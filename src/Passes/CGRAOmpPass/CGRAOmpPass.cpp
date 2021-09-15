@@ -25,19 +25,16 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 14-09-2021 01:52:49
+*    Last Modified: 15-09-2021 11:17:47
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
 #include "CGRAModel.hpp"
-#include "CGRADataFlowGraph.hpp"
 #include "OptionPlugin.hpp"
+#include "CGRAOmpAnnotationPass.hpp"
 
-#include "llvm/IR/Function.h"
 #include "llvm/ADT/Statistic.h"
 
-
-#include "llvm/IR/Instruction.h"
 
 using namespace llvm;
 using namespace CGRAOmp;
@@ -47,80 +44,32 @@ using namespace CGRAOmp;
 // # of successfully exracted DFGs
 STATISTIC(num_dfg, "the number of extracted DFGs");
 
-PreservedAnalyses CGRAOmpPass::run(Module &M, ModuleAnalysisManager &AM)
+AnalysisKey ModelManagerPass::Key;
+
+ModelManagerPass::Result
+ModelManagerPass::run(Module &M, ModuleAnalysisManager &AM)
 {
-	errs() << "CGRAOmpPass is called\n";
+	// for cache result
+	AM.getResult<ModuleAnnotationAnalysisPass>(M);
 
-	for (auto &F : M) {
-		errs() << F.getName() << "\n";
-
-
-		// //memo. -Wno-unknown-assumption
-		// auto attrs = F.getAttributes();
-		// for (auto attr_set : make_range(attrs.begin(), attrs.end())) {
-		// 	auto attr = attr_set.getAttribute("llvm.assume");
-		// 	errs() << F.getName() << " " << attr.isValid() << " "
-		// 	<< attr.getAsString() << "\n";
-		// }
-		// Skip declaration
-		if (F.isDeclaration()) continue;
-
-		auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
-		errs() << "get FAM\n";
-		auto verify_res = FAM.getResult<VerifyPass>(F);
-		errs() << "get Rest\n";
-		errs() << verify_res << "\n";
-		if (verify_res) num_dfg++;
-
-
-		for (auto &BB : F) {
-			for (auto &I : BB) {
-				I.print(errs());
-				if (auto entry = model->isSupported(&I)) {
-					errs() << "\tSupported" << "\n";
-					entry->dump();
-				} else {
-					errs() << "\tUnsupported\n";
-				}
-			}
-		}
-		errs() << "fin\n";
-	}
-
-	auto dfg = CGRADFG();
-	SmallVector<DFGNode*> IDtoNode;
-	InstMap inst_map;
-	cantFail(inst_map.add_generic_inst("add"));
-	for (int i = 0; i < 5; i++) {
-		auto *NewNode = new ComputeNode(i, inst_map.find("add"));
-		IDtoNode.push_back(NewNode);
-		dfg.addNode(*NewNode);
-	}
-	SmallVector<pair<int,int>> edge_list = {{0, 3}, {1, 3}, {2, 4}, {3, 4}};
-	for (auto e : edge_list) {
-		auto *NewEdge = new DFGEdge(*IDtoNode[e.second]);
-		dfg.connect(*IDtoNode[e.first], *IDtoNode[e.second], *NewEdge);
-	}
-
-	errs() << "DFS\n";
-	for (auto &v : depth_first(&dfg)) {
-		//skip virtual root
-		if (*v == dfg.getRoot()) continue;
-			errs() << formatv("\tID {0}\n", v->getID());
-	}
-
-	dfg.setName("this is graph name");
-	if (auto E = dfg.saveAsDotGraph("graph_test.dot")) {
+	errs() << "Instantiate CGRAModel\n";
+	auto ErrorOrModel = parseCGRASetting(PathToCGRAConfig);
+	if (!ErrorOrModel) {
 		ExitOnError Exit(ERR_MSG_PREFIX);
-		Exit(std::move(E));
+		Exit(std::move(ErrorOrModel.takeError()));
 	}
+	auto model = *ErrorOrModel;
 
-
-//	CGRAModel hoge;
-
-	return PreservedAnalyses::all();
+	return ModelManager(model);
 }
 
+bool ModelManager::invalidate(Module& M, const PreservedAnalyses &PA,
+								ModuleAnalysisManager::Invalidator &Inv)
+{
+	// always keeping this reuslt valid after creation
+	auto PAC = PA.getChecker<ModelManagerPass>();
+	return !PAC.preservedWhenStateless();
+}
 
 #undef DEBUG_TYPE
 
@@ -133,19 +82,21 @@ llvmGetPassPluginInfo() {
 				[](StringRef Name, ModulePassManager &PM,
 					ArrayRef<PassBuilder::PipelineElement>){
 						if (Name == "cgraomp") {
-							auto model = parseCGRASetting(
-								PathToCGRAConfig
-							);
-							if (!model) {
-								ExitOnError Exit(ERR_MSG_PREFIX);
-								Exit(std::move(model.takeError()));
-							}
-							PM.addPass(CGRAOmpPass(*model));
+							// make a pipeline
+							// Verify->DFGExraction->Runtime Insertion
+							PM.addPass(VerifyModulePass());
 							return true;
 						}
 						return false;
 				}
 			);
+
+			PB.registerAnalysisRegistrationCallback(
+				[](ModuleAnalysisManager &MAM) {
+					MAM.registerPass([&] {
+						return ModelManagerPass();
+					});
+			});
 		}
 	};
 }

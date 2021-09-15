@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 13-09-2021 18:26:13
+*    Last Modified: 14-09-2021 23:15:17
 */
 
 #include "CGRAInstMap.hpp"
@@ -33,6 +33,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Module.h"
 
 #include "OptionPlugin.hpp"
 #include "CGRAModel.hpp"
@@ -393,13 +394,20 @@ bool CustomInstMapEntry::match(Instruction *I)
 
 bool CustomInstMapEntry::isCustomOpFunc(Function *F)
 {
-	auto attrs = F->getAttributes();
-	for (auto attr_set : VEC_MAKE_RANGE(attrs)) {
-		auto attr = attr_set.getAttribute("llvm.assume");
-		if (attr.isValid()) {
-			if (attr.getValueAsString() == CGRAOMP_CUSTOM_INST_ATTR) {
-				return true;
-			}
+
+	auto M = F->getParent();
+	if (auto I = M->getGlobalVariable("llvm.global.annotations")) {
+		auto *CArr = dyn_cast<ConstantArray>(I->getOperand(0));
+		if (!CArr) return false;
+		for (auto &U : CArr->operands()) {
+			auto *CS = dyn_cast<ConstantStruct>(U.get());
+			if (!CS) continue;
+			auto *f = dyn_cast<Function>(CS->getOperand(0)->getOperand(0));
+			if (!f) continue;
+			auto *anno_var = dyn_cast<GlobalVariable>(CS->getOperand(1)->getOperand(0));
+			if (!anno_var) continue;
+			auto anno_str = dyn_cast<ConstantDataArray>(anno_var->getInitializer())->getAsCString();
+			if (F == f) return true;
 		}
 	}
 	return false;

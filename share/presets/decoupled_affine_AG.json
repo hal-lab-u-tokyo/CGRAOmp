@@ -11,7 +11,7 @@
 		"allowed": true,
 		"type": "generic"
 	},
-	"custom_instructions": [ "fexp", "fsin" ],
+	"custom_instructions": [ "fexp", "fsin", "fcos", "fpow"],
 	"generic_instructions": [
 		"add", "sub", "mul", "udiv", "sdiv", "and", "or", "xor", "fadd",
 		"fsub", "fmul", "fdiv", "icmp"

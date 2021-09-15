@@ -21,14 +21,14 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /Passes/CGRAOmpVerifyPass/VerifyPass.cpp
+*    File:          /src/Passes/CGRAOmpVerifyPass/VerifyPass.cpp
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 28-08-2021 15:29:00
+*    Last Modified: 15-09-2021 11:18:39
 */
 #include "VerifyPass.hpp"
-
+#include "CGRAOmpAnnotationPass.hpp"
 
 using namespace llvm;
 using namespace CGRAOmp;
@@ -56,12 +56,41 @@ bool VerifyResult::bool_operator_impl()
 
 VerifyResult VerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 {
+	errs() << "verifying " << F.getName() << "\n";
 	VerifyResult result;
 
+	GET_MODEL_FROM_FUNCTION(model);
 
+	for (auto &BB : F) {
+		for (auto &I : BB) {
+			if (auto entry = model->isSupported(&I)) {
+				I.dump();
+				entry->dump();
+			}
+		}
+	}
 	return result;
 }
 
+PreservedAnalyses VerifyModulePass::run(Module &M, ModuleAnalysisManager &AM)
+{
+	errs() << "verification\n";
+
+	auto &MM = AM.getResult<ModelManagerPass>(M);
+	auto model = MM.getModel();
+
+	// verify all OpenMP kernel
+	for (auto &F : M) {
+		// skik only declaration
+		if (F.isDeclaration()) continue;
+		// verify OpenMP target function
+		auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+		auto verify_res = FAM.getResult<VerifyPass>(F);
+	}
+
+	// there is no modification so it does not keep all analysis
+	return PreservedAnalyses::all();
+}
 
 
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 27-08-2021 22:33:03
+*    Last Modified: 15-09-2021 10:24:09
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -36,6 +36,16 @@
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+
+#include "CGRAOmpPass.hpp"
+
+#define GET_MODEL_FROM_FUNCTION(MODEL) auto &MAMProxy = \
+	AM.getResult<ModuleAnalysisManagerFunctionProxy>(F); \
+	auto &M = *(F.getParent()); \
+	auto *MM = MAMProxy.getCachedResult<ModelManagerPass>(M); \
+	assert(MM && "ModuleManagerPass must be executed at the beginning"); \
+	auto MODEL = MM->getModel(); \
 
 using namespace llvm;
 
@@ -66,7 +76,7 @@ namespace CGRAOmp {
 
 		// interface to print messages
 		virtual void print(raw_ostream &OS) const = 0;
-		void dump() { this->print(errs()); }
+		void dump() { this->print(dbgs()); }
 		friend raw_ostream& operator<<(raw_ostream& OS, 
 										const VerifyResultBase &v) {
 			v.print(OS);
@@ -106,6 +116,35 @@ namespace CGRAOmp {
 		private:
 			friend AnalysisInfoMixin<VerifyPass>;
 			static AnalysisKey Key;
+
+	};
+
+	// class LoopNestAnalysis : public VerifyResultBase {
+
+	// };
+
+	// class VerifyNestedLoop : public 
+
+	// class AGCompatibility : public VerifyResultBase {
+	// 	public:
+	// 		AGCompatibility() : VerifyResultBase() {}
+		
+	// };
+
+	// class VerifyAGCompatiblePass :
+	// 	public AnalysisInfoMixin<VerifyAGCompatiblePass> {
+	// 	public:
+	// 		using Result = AGCompatibility;
+	// 		Result run(Function )
+	// 	private:
+	// 		friend AnalysisInfoMixin<VerifyAGCompatiblePass>;
+	// 		static AnalysisKey Key;
+	// };
+
+	class VerifyModulePass : public PassInfoMixin<VerifyModulePass> {
+		public:
+			PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+		private:
 
 	};
 

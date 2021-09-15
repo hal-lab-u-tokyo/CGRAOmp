@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 14-09-2021 01:44:19
+*    Last Modified: 15-09-2021 11:33:32
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -46,15 +46,51 @@ using namespace llvm;
 
 namespace CGRAOmp {
 
-	class CGRAOmpPass : public PassInfoMixin<CGRAOmpPass> {
+	/**
+	 * @class ModelManager
+	 * @brief An interface for each LLVM pass to get the target CGRAModel.
+	 * It can be obtained as an analysis result of ModelManagerPass.
+	*/
+	class ModelManager {
 		public:
-			explicit CGRAOmpPass(CGRAModel* model) : model(model) {};
-			PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+			ModelManager() = delete;
+			/**
+			 * @brief Construct a new ModelManager object
+			 * 
+			 * @param CM a generated CGRAModel
+			 */
+			explicit ModelManager(CGRAModel *CM) : model(CM) {};
+			/// copy constructor
+			ModelManager(const ModelManager&) = default;
+			/// move constructor
+			ModelManager(ModelManager&&) = default;
+			/**
+			 * @brief Get the CGRAModel object
+			 * @return CGRAModel* this manger contains
+			 */
+			CGRAModel* getModel() const { return model; }
+
+			/// implemented for enabling getCacheResult from FunctionPasses
+			bool invalidate(Module& M, const PreservedAnalyses &PA,
+								ModuleAnalysisManager::Invalidator &Inv);
 		private:
+			CGRAModel* model;
+	};
+
+	/**
+	 * @class ModelManagerPass
+	 * @brief Module Pass to give the ModuleManager
+	*/
+	class ModelManagerPass : public AnalysisInfoMixin<ModelManagerPass> {
+		public:
+			using Result = ModelManager;
+			Result run(Module &M, ModuleAnalysisManager &AM);
+		private:
+			friend AnalysisInfoMixin<ModelManagerPass>;
+			static AnalysisKey Key;
 			CGRAModel *model;
 	};
 
-	
 }
 
 #endif //CGRAOmpPass_H

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:35:11
-*    Last Modified: 14-09-2021 01:41:02
+*    Last Modified: 14-09-2021 23:13:13
 */
 
 #ifndef CGRAInstMap_H
@@ -454,7 +454,8 @@ namespace CGRAOmp
 			bool match(Instruction *I);
 
 		private:
-			static bool isCustomOpFunc(Function *F);
+			bool isCustomOpFunc(Function *F);
+			static DenseSet<Function*> cached;
 	};
 
 	/**
