@@ -25,14 +25,12 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  27-08-2021 14:18:38
-#    Last Modified: 10-09-2021 12:20:40
+#    Last Modified: 15-09-2021 12:38:54
 #
 add_llvm_library( libCGRAOmpComponents MODULE
   ## append source file list here
   OptionPlugin.cpp
-  CGRAModel.cpp
   CGRADataFlowGraph.cpp
-  CGRAInstMap.cpp
 
   DEPENDS
   intrinsics_gen
@@ -44,4 +42,5 @@ add_llvm_library( libCGRAOmpComponents MODULE
 target_include_directories( libCGRAOmpComponents
   PRIVATE ${PROJECT_SOURCE_DIR}/include
   )
+
 

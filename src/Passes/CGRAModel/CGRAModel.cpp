@@ -21,11 +21,11 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /src/Passes/CGRAOmpComponents/CGRAModel.cpp
+*    File:          /src/Passes/CGRAModel/CGRAModel.cpp
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:46
-*    Last Modified: 15-09-2021 12:26:06
+*    Last Modified: 15-09-2021 12:48:29
 */
 #include "CGRAModel.hpp"
 
