@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:30
-*    Last Modified: 14-09-2021 13:45:10
+*    Last Modified: 15-09-2021 11:50:57
 */
 #ifndef CGRAModel_H
 #define CGRAModel_H
@@ -134,14 +134,23 @@ namespace CGRAOmp
 			CGRAModel(CGRAModel &&) = default;
 
 			/**
-			 * @brief add a supported insturction for the CGRA
+			 * @brief add a supported generic insturction for the CGRA
 			 * 
 			 * @param opcode opcode of the instruction
 			 * 	- if it is already added instruction, this function does nothing
-			 * @param isCustom true if the instruction is custom instruction (i.e., not LLVM-IR instruction)
 			 * @return Error is returned if unknown opcode is specified
 			 */
-			Error addSupportedInst(StringRef opcode, bool isCustom);
+			Error addSupportedInst(StringRef opcode);
+
+
+			/**
+			 * @brief add a custom insturction for the CGRA
+			 * 
+			 * @param opcode opcode of the instruction
+			 * 	- if it is already added instruction, this function does nothing
+			 * @param MAM ModuleAnalysisManager
+			 */
+			void addCustomInst(StringRef opcode, ModuleAnalysisManager &MAM);
 
 			/**
 			 * @brief add a instruction mapping entry to the CGRA model
@@ -458,9 +467,11 @@ namespace CGRAOmp
 	 * @brief a helper function to instantiate CGRAModel based on JSON configfile
 	 * 
 	 * @param filepath filepath to the JSON config file
+	 * @param MAM ModuleAnalysisManager
 	 * @return Expected<CGRAModel> CGRAModel if there is no error. Otherwise, it contains ModelError
 	 */
-	Expected<CGRAModel*> parseCGRASetting(StringRef filepath);
+	Expected<CGRAModel*> parseCGRASetting(StringRef filepath,
+											ModuleAnalysisManager &MAM);
 
 	/**
 	 * @brief a template to extract only values from SettingMap

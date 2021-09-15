@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 14-09-2021 23:15:17
+*    Last Modified: 15-09-2021 12:35:33
 */
 
 #include "CGRAInstMap.hpp"
@@ -225,7 +225,7 @@ Error InstMap::add_generic_inst(StringRef opcode)
 	return ErrorSuccess();
 }
 
-void InstMap::add_custom_inst(StringRef opcode)
+void InstMap::add_custom_inst(StringRef opcode, ModuleAnalysisManager &MAM)
 {
 	if (defaultEntries.find(opcode) != defaultEntries.end()) {
 		// already added
@@ -235,11 +235,11 @@ void InstMap::add_custom_inst(StringRef opcode)
 		}
 	} else {
 		auto opcode_str = opcode.str();
-		entry_gen[opcode] = [=](MapCondition *c){
+		entry_gen[opcode] = [&,opcode_str](MapCondition *c){
 			if (c) {
-				return make_shared<CustomInstMapEntry>(opcode_str, c);
+				return make_shared<CustomInstMapEntry>(opcode_str, MAM, c);
 			} else {
-				return make_shared<CustomInstMapEntry>(opcode_str);
+				return make_shared<CustomInstMapEntry>(opcode_str, MAM);
 			}
 		};
 		entry_ptr x = entry_gen[opcode](nullptr);
@@ -370,11 +370,11 @@ bool CompOpMapEntry::match(Instruction *I)
 /**
  * @details the function corresponding to the custom instruction must satisfy the following conditions
  * -# the function name is the same as the opcode of the custom instruction
- * -# the function has an attribute: "llvm.assume"="cgra_custom_inst"
+ * -# the function is annotated with "cgra_custom_inst"
  * 
- * The following declaration is an example adding this attribute to a function:
+ * The following declaration is an example to annotate a function:
  * @code
- * __attribute__((assume("cgra_custom_inst"))) int func(int x, int y);
+ * __attribute__((annotate("cgra_custom_inst"))) int func(int x, int y);
  * @endcode 
  *
 */
@@ -394,23 +394,10 @@ bool CustomInstMapEntry::match(Instruction *I)
 
 bool CustomInstMapEntry::isCustomOpFunc(Function *F)
 {
-
-	auto M = F->getParent();
-	if (auto I = M->getGlobalVariable("llvm.global.annotations")) {
-		auto *CArr = dyn_cast<ConstantArray>(I->getOperand(0));
-		if (!CArr) return false;
-		for (auto &U : CArr->operands()) {
-			auto *CS = dyn_cast<ConstantStruct>(U.get());
-			if (!CS) continue;
-			auto *f = dyn_cast<Function>(CS->getOperand(0)->getOperand(0));
-			if (!f) continue;
-			auto *anno_var = dyn_cast<GlobalVariable>(CS->getOperand(1)->getOperand(0));
-			if (!anno_var) continue;
-			auto anno_str = dyn_cast<ConstantDataArray>(anno_var->getInitializer())->getAsCString();
-			if (F == f) return true;
-		}
-	}
-	return false;
+	auto *M = F->getParent();
+	auto &FAM = MAM.getResult<FunctionAnalysisManagerModuleProxy>(*M).getManager();
+	auto annot = FAM.getResult<AnnotationAnalysisPass>(*F);
+	return annot.contains(CGRAOMP_CUSTOM_INST_ATTR);
 }
 
 /* ============ Utility functions for parsing the configration  ============ */

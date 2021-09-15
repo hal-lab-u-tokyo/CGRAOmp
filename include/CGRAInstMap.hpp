@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:35:11
-*    Last Modified: 14-09-2021 23:13:13
+*    Last Modified: 15-09-2021 12:29:53
 */
 
 #ifndef CGRAInstMap_H
@@ -39,6 +39,9 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/IR/PassManager.h"
+
+#include "CGRAOmpAnnotationPass.hpp"
 
 
 #include <float.h>
@@ -436,17 +439,22 @@ namespace CGRAOmp
 			 * @brief Construct a new CustomIns MapEntry object
 			 * 
 			 * @param func_name a function name correspoinding to the custom instruction
+			 * @param MAM ModuleAnalysisManager
 			 */
-			CustomInstMapEntry(StringRef func_name) :
-				InstMapEntry(func_name) {};
+			CustomInstMapEntry(StringRef func_name, 
+								ModuleAnalysisManager &MAM) : 
+								InstMapEntry(func_name), MAM(MAM) {};
 			/**
 			 * @brief Construct a new CustomInstMapEntry object with an initial MapCondition instance
 			 * 
 			 * @param func_name a function name correspoinding to the custom instruction
+			 * @param MAM ModuleAnalysisManager
 			 * @param cond mapping condition
 			 */
-			CustomInstMapEntry(StringRef func_name, MapCondition* map_cond) :
-				InstMapEntry(func_name, map_cond) {};
+			CustomInstMapEntry(StringRef func_name, 
+								ModuleAnalysisManager &MAM,
+								MapCondition* map_cond) :
+				InstMapEntry(func_name, map_cond), MAM(MAM) {};
 
 			/**
 			 * @brief Derived function from InstMapEntry::match specilized for custom instruction
@@ -455,7 +463,7 @@ namespace CGRAOmp
 
 		private:
 			bool isCustomOpFunc(Function *F);
-			static DenseSet<Function*> cached;
+			ModuleAnalysisManager &MAM;
 	};
 
 	/**
@@ -497,8 +505,9 @@ namespace CGRAOmp
 			 * @brief add a custom instruction
 			 * 
 			 * @param opcode opcode string of the instruction (= the corresponding function name)
+			 * @param MAM ModuleAnalysisManager
 			 */
-			void add_custom_inst(StringRef opcode);
+			void add_custom_inst(StringRef opcode, ModuleAnalysisManager &MAM);
 
 			/**
 			 * @brief add an entry with a mapping condition

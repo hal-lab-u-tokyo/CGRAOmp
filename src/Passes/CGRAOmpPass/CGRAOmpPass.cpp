@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 15-09-2021 11:17:47
+*    Last Modified: 15-09-2021 11:51:15
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
@@ -53,7 +53,7 @@ ModelManagerPass::run(Module &M, ModuleAnalysisManager &AM)
 	AM.getResult<ModuleAnnotationAnalysisPass>(M);
 
 	errs() << "Instantiate CGRAModel\n";
-	auto ErrorOrModel = parseCGRASetting(PathToCGRAConfig);
+	auto ErrorOrModel = parseCGRASetting(PathToCGRAConfig, AM);
 	if (!ErrorOrModel) {
 		ExitOnError Exit(ERR_MSG_PREFIX);
 		Exit(std::move(ErrorOrModel.takeError()));

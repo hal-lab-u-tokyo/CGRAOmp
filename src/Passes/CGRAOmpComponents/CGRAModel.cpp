@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:46
-*    Last Modified: 15-09-2021 02:19:13
+*    Last Modified: 15-09-2021 12:26:06
 */
 #include "CGRAModel.hpp"
 
@@ -295,7 +295,8 @@ Expected<AddressGenerator*> CGRAOmp::createAffineAG(json::Object *json_obj,
 	}
 }
 
-Expected<CGRAModel*> CGRAOmp::parseCGRASetting(StringRef filename)
+Expected<CGRAModel*> CGRAOmp::parseCGRASetting(StringRef filename,
+						ModuleAnalysisManager &MAM)
 {
 	//open json file
 	error_code fopen_ec;
@@ -374,7 +375,7 @@ Expected<CGRAModel*> CGRAOmp::parseCGRASetting(StringRef filename)
 		return inst_list.takeError();
 	} else {
 		for (auto inst : *inst_list) {
-			Error E = model->addSupportedInst(inst, false);
+			Error E = model->addSupportedInst(inst);
 			if (E) {
 				return Error(std::move(E));
 			}
@@ -387,7 +388,7 @@ Expected<CGRAModel*> CGRAOmp::parseCGRASetting(StringRef filename)
 		return cust_list.takeError();
 	} else {
 		for (auto inst : *cust_list) {
-			cantFail(std::move(model->addSupportedInst(inst, true)));
+			model->addCustomInst(inst, MAM);
 		}
 	}
 
@@ -429,16 +430,16 @@ StringMap<CGRAModel::InterLoopDep> CGRAModel::InterLoopDepMap({
 });
 
 
-Error CGRAModel::addSupportedInst(StringRef opcode, bool isCustom)
+Error CGRAModel::addSupportedInst(StringRef opcode)
 {
-	if (isCustom) {
-		// add custom inst never return Error
-		inst_map.add_custom_inst(opcode);
-		return ErrorSuccess();
-	} else {
-		return std::move(inst_map.add_generic_inst(opcode));
-	}
+	return std::move(inst_map.add_generic_inst(opcode));
 }
+
+void CGRAModel::addCustomInst(StringRef opcode, ModuleAnalysisManager &MAM)
+{
+	inst_map.add_custom_inst(opcode, MAM);
+}
+
 
 
 Error CGRAModel::add_map_entry(StringRef opcode, MapCondition *map_cond)
