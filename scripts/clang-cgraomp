@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+# -*- coding:utf-8 -*-
+
+###
+#   MIT License
+#   
+#   Copyright (c) 2021 Amano laboratory, Keio University & Processor Research Team, RIKEN Center for Computational Science
+#   
+#   Permission is hereby granted, free of charge, to any person obtaining a copy of
+#   this software and associated documentation files (the "Software"), to deal in
+#   the Software without restriction, including without limitation the rights to
+#   use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+#   of the Software, and to permit persons to whom the Software is furnished to do
+#   so, subject to the following conditions:
+#   
+#   The above copyright notice and this permission notice shall be included in all
+#   copies or substantial portions of the Software.
+#   
+#   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+#   SOFTWARE.
+#   
+#   File:          /scripts/clang-cgraomp
+#   Project:       CGRAOmp
+#   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+#   Created Date:  15-09-2021 17:22:43
+#   Last Modified: 17-09-2021 15:54:52
+###
+
+from argparse import ArgumentParser
+import os
+import sys
+import subprocess
+from pathlib import Path
+from shutil import get_terminal_size
+from functools import reduce
+import random
+import string
+
+installed_dir = str(Path(__file__).parent.parent.absolute())
+default_libdir = installed_dir + "/lib"
+
+TARGET_FMT = "{target}-unknown-linux-gnu"
+OMP_TARGET_FMT = "openmp-{target}"
+RED_STR = "\x1b[31m{0}\x1b[39m"
+MAGENTA_STR = "\x1b[35m{0}\x1b[39m"
+GREEN_STR = "\x1b[32m{0}\x1b[39m"
+BOLD_STR = "\x1b[1m{0}\x1b[0m"
+
+WARNING_STR = MAGENTA_STR.format(BOLD_STR.format("Warning"))
+
+OPT_FLAGS = {"-O0", "-O1", "-O2", "-O3", "-Os", "-Oz"}
+PRE_OPTS = ["-mem2reg", "-aggressive-instcombine", "-simplifycfg"]
+
+
+IMM_FILES = []
+
+def parser():
+    description = "OVERVIEW: CGRA OpenMP compiler driver based on LLVM/clang"
+    usage = "{0} [options...] file...".format(os.path.basename(__file__))
+    argparser = ArgumentParser(usage=usage, description=description)
+    # for source files
+    argparser.add_argument("files", type=str, nargs="+", help="")
+    # CGRAOmp options
+    argparser.add_argument("-cc", "--cgra-config", type=str, metavar="<path>",\
+            help="specify the path to CGRA config file.", required=True)
+    argparser.add_argument("--cgraomp-lib-path", type=str, metavar="<path>", \
+            help="specify the library path to the CGRA OpenMP. " + \
+            "If it is not used, a default path (INSTALL_PREFIX/lib/) will be used")
+    # general options
+    argparser.add_argument("-o", dest="output", type=str, metavar="<file>",\
+            help="write final binary to <file>")
+    argparser.add_argument("-O0", dest="opt", action="store_const", \
+            const = "-O0", help="Optimization level 0. Similar to clang -O0")
+    argparser.add_argument("-O1", dest="opt", action="store_const", \
+            const = "-O1", help="Optimization level 1. Similar to clang -O1")
+    argparser.add_argument("-O2", dest="opt", action="store_const", \
+            const = "-O2", help="Optimization level 2. Similar to clang -O2")
+    argparser.add_argument("-O3", dest="opt", action="store_const", \
+            const = "-O3", help="Optimization level 3. Similar to clang -O3")
+    argparser.add_argument("-Os", dest="opt", action="store_const", \
+            const = "-Os", help="Like -O2 with extra optimizations for size. Similar to clang -Os")
+    argparser.add_argument("-Oz", dest="opt", action="store_const", \
+            const = "-Oz", help="Like -Os but reduces code size further. Similar to clang -Oz")
+    argparser.add_argument("-v", "--verbose", action="store_true", \
+            help="Enables verbose mode")
+    argparser.add_argument("--arch", type=str, default="x86_64", \
+            metavar="<str>", help="specify the target cpu architecture" + \
+            "(default: x86)")
+    argparser.add_argument("-Xc", dest="clang_args", action="append", \
+            metavar="<arg>", help="Pass args on to the back-end clang")
+    argparser.add_argument("-save-temps", action="store_true", \
+            help="save intermediate compilation files")
+    # default setting
+    argparser.set_defaults(opt="-O2", clang_args=[])
+
+    args = argparser.parse_args()
+
+    return args
+
+def run(msg, cmd, childEnv = os.environ):
+    # print(reduce(lambda x, y: x + " " + y, cmd))
+    msg_fmt = "{{0:<{0}}}: ".format(int(get_terminal_size().columns / 1.5 ))
+    print(msg_fmt.format(msg), file=sys.stdout, flush = True, end = "")
+
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, \
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,\
+                    shell=False, env = childEnv)
+
+    (proc_out, proc_err) = proc.communicate()
+    ret_code = proc.wait()
+    if ret_code == 0:
+        # success
+        print("[" + GREEN_STR.format("  OK  ") + "]", \
+                    file = sys.stdout, flush = True)
+    else:
+        print("[" + RED_STR.format("FAILED") + "]", \
+                    file = sys.stdout, flush = True)
+
+    if len(proc_err) > 0:
+        sys.stderr.buffer.write(proc_err)
+        sys.stderr.buffer.flush()
+
+    if len(proc_out) > 0:
+        sys.stdout.buffer.write(proc_out)
+        sys.stdout.buffer.flush()
+
+    return ret_code == 0
+
+def clangIn(sources, outfile, arch, extra_args):
+    pass_args = [ _ for _ in extra_args ]
+    cmd = ["clang", "-O0", "-S", "-emit-llvm", "-Xclang",
+            "-disable-O0-optnone", "-fopenmp" ]
+
+    # color output preference
+    if "-fno-diagnostics-color" not in extra_args:
+        cmd.append("-fdiagnostics-color")
+    elif "-fdiagnostics-color" in extra_args:
+        pass_args.remove("-fdiagnostics-color")
+
+    # ignore opt flags at this phase
+    flags = OPT_FLAGS & set(extra_args)
+    if len(flags) > 0:
+        for f in flags:
+            pass_args.remove(f)
+
+    cmd.append("-fopenmp-targets={0}".format(arch))
+    cmd.extend(extra_args)
+    cmd.extend(sources)
+    cmd.extend(["-o", outfile])
+
+    return run("Clang front-end", cmd)
+
+def hostOpt(infile, outfile, opt_level):
+    cmd = ["opt", opt_level, infile, "-S", "-o", outfile]
+    return run("Optimization of host code", cmd)
+
+def cgraPreOpt(infile, outfile):
+    cmd = ["opt", "-S"]
+    cmd += PRE_OPTS
+    cmd += [infile, "-o", outfile]
+    return run("Pre-Optimization of CGRA kernel code", cmd)
+
+def unbundle(source, host_out, cgra_out, arch):
+    cmd = ["clang-offload-bundler", "--unbundle", \
+            "--inputs={0}".format(source), "-type=ll", \
+            "--outputs={0},{1}".format(host_out, cgra_out), \
+            "--targets=host-{0},{1}".format(\
+                    TARGET_FMT.format(target = arch),
+                    OMP_TARGET_FMT.format(target = arch))]
+    return run("OpenMP target unbundling", cmd)
+
+def passCGRAOmp(infile, outfile, libpath, config, options):
+    cmd = ["opt", "-S"]
+    cmd += ["-load", f"{libpath}/libCGRAOmpComponents.so"]
+    cmd += ["--enable-new-pm"]
+    cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpAnnotationPass.so"]
+    cmd += ["-load-pass-plugin", f"{libpath}/libCGRAModel.so"]
+    cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpPass.so"]
+    cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpVerifyPass.so"]
+    cmd += ["-passes=cgraomp"]
+    cmd += ["-cm", config]
+    cmd += [infile]
+    cmd += ["-o", outfile]
+    cmd += options
+    return run("Verify kernel, extract DFG, and insert runtime",\
+                cmd)
+
+def main():
+    args = parser()
+    if (args.opt == "O0"):
+        print(WARNING_STR + ": Optimization level O0 is not available")
+
+    # filepath setting
+    if args.output is None:
+        outdir = "."
+        if len(args.files) > 1:
+            basename = "app"
+        else:
+            basename = Path(args.files[0]).stem
+    else:
+        p = Path(args.output)
+        outdir = str(p.parent)
+        basename = p.stem
+
+    if args.save_temps:
+        tmp_dirs = outdir
+        add_imm = lambda f: None
+        temp_basename = basename
+    else:
+        tmp_dirs = "/tmp"
+        temp_basename = basename + "-" + get_random_str(8)
+        add_imm = lambda f: addImmFile(f)
+
+    # compile C source to bundled LLVM-IR
+    bundled_name = "{0}/{1}.bundled.ll".format(tmp_dirs,temp_basename)
+    if clangIn(args.files, bundled_name, args.arch, \
+                     args.clang_args):
+        add_imm(bundled_name)
+    else:
+        return
+
+    # unbundle LLVM-IR
+    host_unbundle_name = "{0}/{1}.host.ll".format(tmp_dirs,temp_basename)
+    cgra_unbundle_name = "{0}/{1}.cgra.ll".format(tmp_dirs,temp_basename)
+    if unbundle(bundled_name, host_unbundle_name, cgra_unbundle_name,\
+                     args.arch):
+        add_imm(host_unbundle_name)
+        add_imm(cgra_unbundle_name)
+
+    # optimize host IR
+    if not hostOpt(host_unbundle_name, host_unbundle_name, args.opt):
+        return
+
+    # pre-optimize kernel IR
+    if not cgraPreOpt(cgra_unbundle_name, cgra_unbundle_name):
+        return
+
+    # run CGRAOmp Passes
+    cgra_post_name = "{0}/{1}.cgra.post.ll".format(tmp_dirs,temp_basename)
+    libpath = default_libdir if args.cgraomp_lib_path is None else \
+                    args.cgraomp_lib_path
+
+    if passCGRAOmp(cgra_unbundle_name, cgra_post_name, libpath, \
+                        args.cgra_config, []):
+        add_imm(cgra_post_name)
+    else:
+        return
+
+def addImmFile(f):
+    IMM_FILES.append(f)
+
+def cleanUp():
+    for f in IMM_FILES:
+        os.remove(f)
+
+def get_random_str(length):
+   return ''.join([random.choice(string.ascii_letters + string.digits) \
+                for _ in range(length)])
+
+if __name__ == "__main__":
+    try:
+        main()
+    finally:
+        if len(IMM_FILES) > 0:
+            cleanUp()

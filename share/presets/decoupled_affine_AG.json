@@ -8,18 +8,15 @@
 		"allowed": false
 	},
 	"inter-loop-dependency": {
-		"allowed": true,
-		"type": "generic"
+		"allowed": false
 	},
 	"custom_instructions": [ "fexp", "fsin", "fcos", "fpow"],
 	"generic_instructions": [
 		"add", "sub", "mul", "udiv", "sdiv", "and", "or", "xor", "fadd",
-		"fsub", "fmul", "fdiv", "icmp"
+		"fsub", "fmul", "fdiv"
 	],
 	"instruction_map": [
 		{ "inst": "xor", "rhs": {"ConstantInt" : -1}, "map": "not"},
-		{ "inst": "xor", "map": "other_xor"},
-		{ "inst": "fsin", "rhs": {"ConstantDouble": 0.1 }, "map": "fsin0p1"},
-		{ "inst": "fsin", "map": "fsin"}
+		{ "inst": "xor", "map": "xor"}
 	]
 }
