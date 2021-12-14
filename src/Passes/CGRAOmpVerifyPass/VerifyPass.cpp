@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 14-12-2021 15:47:30
+*    Last Modified: 14-12-2021 18:56:12
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -48,6 +48,7 @@
 #include "DecoupledAnalysis.hpp"
 
 #include <system_error>
+#include <functional>
 
 using namespace llvm;
 using namespace CGRAOmp;
@@ -86,7 +87,10 @@ VerifyResult GenericVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 				 << F.getName() << "for generic CGRA\n");
 	VerifyResult result;
 
-	GET_MODEL_FROM_FUNCTION(model);
+	// get CGRA model
+	auto MM = AM.getResult<ModelManagerFunctionProxy>(F);
+	auto model = MM.getModel();
+	auto gene_model = model->asDerived<GenericCGRA>();
 
 	assert(!"GenericVerifyPass is not implemented");
 
@@ -102,7 +106,9 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 				 << F.getName() << "\n");
 	VerifyResult result;
 
-	GET_MODEL_FROM_FUNCTION(model);
+	// get CGRA model
+	auto MM = AM.getResult<ModelManagerFunctionProxy>(F);
+	auto model = MM.getModel();
 	auto dec_model = model->asDerived<DecoupledCGRA>();
 
 	// ensure OmpStaticShecudleAnalysis result is cached for DecoupledAnalysis
@@ -113,16 +119,47 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		Exit(make_error<StringError>("Fail to find OpenMP scheduling info", EC));
 	}
 
+	// setup loop analysis manager
+	auto AR = getLSAR(F, AM);
+ 	auto &LPM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+	// get Kernel candidates
+	auto loop_kernels = findPerfectlyNestedLoop(F, AR);
+
+	if (loop_kernels.size() == 0) {
+		LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << "Cannot find any valid loop kernels\n");
+		return result;
+	}
+
+	std::function<void(Loop*)> ag_verify_adaptor;
+
 	switch (dec_model->getAG()->getKind()) {
 		case AddressGenerator::Kind::Affine:
-			{ auto ag_comapt = AM.getResult<VerifyAffineAGCompatiblePass>(F); }
+			ag_verify_adaptor = [&](Loop *L) {
+				AG_verification<VerifyAffineAGCompatiblePass>(*L, LPM, AR, result);
+			};
 			break;
 		case AddressGenerator::Kind::FullState:
 			assert(!"FullState AG is not implemented yet");
 			break;
 	}
 
+	// verify each memory access
+	for (auto L : loop_kernels) {
+		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
+					<< "Verifying Affine AG compatibility of a loop: "
+					<< L->getName() << "\n");
+		ag_verify_adaptor(L);
+	}
+
 	return result;
+}
+
+template <typename AGVerifyPassT>
+void DecoupledVerifyPass::AG_verification(Loop &L, LoopAnalysisManager &AM,
+								LoopStandardAnalysisResults &AR, Result &result)
+{
+	AGCompatibility ag_compat = AM.getResult<AGVerifyPassT>(L, AR);
+	//result.setResult(VerificationKind::MemoryAccess, &ag_compat);
 }
 
 /* ================= Implementation of VerifyPassBase ================= */
@@ -180,90 +217,26 @@ SmallVector<Loop*> VerifyPassBase<DerivedT>::findPerfectlyNestedLoop(Function &F
 /* ============= Implementation of VerifyAffineAGCompatiblePass ============= */
 AnalysisKey VerifyAffineAGCompatiblePass::Key;
 
-AffineAGCompatibility VerifyAffineAGCompatiblePass::run(Function &F,
-											FunctionAnalysisManager &AM)
+AffineAGCompatibility VerifyAffineAGCompatiblePass::run(Loop &L,
+	LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR)
 {
 	Result result;
-	GET_MODEL_FROM_FUNCTION(model);
-	auto dec_model = model->asDerived<DecoupledCGRA>();
 
-	// get outer most loops
-	auto AR = getLSAR(F, AM);
-	auto &LPM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
-
-	auto loop_kernels = findPerfectlyNestedLoop(F, AR);
-
-	if (loop_kernels.size() == 0) {
-		LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << "Cannot find any valid loop kernels\n");
-		return result;
-	}
-
-	// verify each memory access
-	for (auto L : loop_kernels) {
-		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
+	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
 					<< "Verifying Affine AG compatibility of a loop: "
-					<< L->getName() << "\n");
-		auto DA = LPM.getResult<DecoupledAnalysisPass>(*L, AR);
+					<< L.getName() << "\n");
 
-		verify_affine_access(*L, LPM, AR, result);
-	}
-
-	return result;
-}
-
-
-void VerifyAffineAGCompatiblePass::verify_affine_access(Loop &L,
-								LoopAnalysisManager &AM,
-								LoopStandardAnalysisResults &AR, Result &R)
-{
+	// get decoupled memory access insts
 	auto DA = AM.getResult<DecoupledAnalysisPass>(L, AR);
-
-	// //for each outermost loop
-	// for (Loop *l : AR.LI) {
-	// 	if (l->getLoopDepth() == 1) {
-	// 		auto LN = LoopNest::getLoopNest(*l, AR.SE);
-	// 		si = AM.getResult<OmpStaticShecudleAnalysis>(*l, AR);
-	// 		if (si) {
-	// 			// get valid schedule info
-	// 		} else {
-	// 			// fail to get schedule info
-	// 			LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << "Fail to get scheduling info");
-	// 		}
-	// 	}
-	// }
-	// auto LN = LoopNest::getLoopNest(L, AR.SE);
-	// auto innermost = LN->getInnermostLoop();
-	// auto preheader = innermost->getLoopPreheader();
-	// assert(innermost && "Innermost loop is not found");
-
-	// SmallVector<LoadInst*> mem_load;
-	// SmallVector<StoreInst*> mem_store;
-
-	// auto& AA = AR.AA;
-
-	// // search for memory access for computation
-	// for (auto &BB : innermost->getBlocks()) {
-	// 	for (auto &I : *BB) {
-	// 		if (auto ld = dyn_cast<LoadInst>(&I)) {
-	// 			if (!si.contains(ld->getOperand(0))) {
-	// 				mem_load.push_back(ld);
-	// 			} // otherwise, it is an information about loop scheduling
-	// 			  // thus, it must not be treated as input data for data flow
-	// 		} else if (auto st = dyn_cast<StoreInst>(&I)) {
-	// 			mem_store.push_back(st);
-	// 		}
-	// 	}
-	// }
 
 	// load pattern
 	check_all<0>(DA.get_loads(), AR.SE);
 	// store pattern
 	check_all<1>(DA.get_stores(), AR.SE);
 
-	// //save the momory access insts
-	// R.setMemLoad(std::move(mem_load));
-	// R.setMemStore(std::move(mem_store));
+	return result;
 }
+
 
 template<int N, typename T>
 bool VerifyAffineAGCompatiblePass::check_all(SmallVector<T*> &list,  ScalarEvolution &SE)
@@ -287,48 +260,48 @@ bool VerifyAffineAGCompatiblePass::check_all(SmallVector<T*> &list,  ScalarEvolu
 	return true;
 }
 
-void VerifyAffineAGCompatiblePass::parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth) {
-	std::string indent =  std::string("\t", depth + 1);
-	errs() << "type: " << scev->getSCEVType() << "\n";
-	switch (scev->getSCEVType()) {
-		case SCEVTypes::scAddRecExpr:
-			{
-				auto *SAR = dyn_cast<SCEVAddRecExpr>(scev);
-				auto *start = SAR->getStart();
-				auto *step = SAR->getStepRecurrence(SE);
-				switch(step->getSCEVType()) {
-					case SCEVTypes::scConstant:
-						//OK
-						errs() << "step: ";
-						step->dump();
-						break;
-					default:
-						//error
-						errs() << "Step is not constant\n";
-						break;
-				}
-			}
-			break;
-		case SCEVTypes::scAddExpr:
-			{
-				auto *SA = dyn_cast<SCEVAddExpr>(scev);
-				SA->dump();
-			}
-			break;
-		case SCEVTypes::scUnknown:
-			{
-				auto *V = dyn_cast<SCEVUnknown>(scev)->getValue();
-				if (auto *arg = dyn_cast<Argument>(V)) {
-					// it is data transfer between host and device
-					// save symbol
-					arg->print(errs() << indent);
-					errs() << " is an arg\n";
-				}
-			}
-		default:
-			break;
-	}
-}
+// void VerifyAffineAGCompatiblePass::parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth) {
+// 	std::string indent =  std::string("\t", depth + 1);
+// 	errs() << "type: " << scev->getSCEVType() << "\n";
+// 	switch (scev->getSCEVType()) {
+// 		case SCEVTypes::scAddRecExpr:
+// 			{
+// 				auto *SAR = dyn_cast<SCEVAddRecExpr>(scev);
+// 				auto *start = SAR->getStart();
+// 				auto *step = SAR->getStepRecurrence(SE);
+// 				switch(step->getSCEVType()) {
+// 					case SCEVTypes::scConstant:
+// 						//OK
+// 						errs() << "step: ";
+// 						step->dump();
+// 						break;
+// 					default:
+// 						//error
+// 						errs() << "Step is not constant\n";
+// 						break;
+// 				}
+// 			}
+// 			break;
+// 		case SCEVTypes::scAddExpr:
+// 			{
+// 				auto *SA = dyn_cast<SCEVAddExpr>(scev);
+// 				SA->dump();
+// 			}
+// 			break;
+// 		case SCEVTypes::scUnknown:
+// 			{
+// 				auto *V = dyn_cast<SCEVUnknown>(scev)->getValue();
+// 				if (auto *arg = dyn_cast<Argument>(V)) {
+// 					// it is data transfer between host and device
+// 					// save symbol
+// 					arg->print(errs() << indent);
+// 					errs() << " is an arg\n";
+// 				}
+// 			}
+// 		default:
+// 			break;
+// 	}
+// }
 
 // void VerifyAffineAGCompatiblePass::parseSCEVAddRecExpr(const SCEVAddRecExpr *SAR,
 // 													ScalarEvolution &SE)
@@ -409,4 +382,17 @@ LoopStandardAnalysisResults CGRAOmp::getLSAR(Function &F,
 	return LoopStandardAnalysisResults(
 		{AA, AC, DT, LI, SE, TLI, TTI, BFI, MSSA}
 	);
+}
+
+CGRAModel* CGRAOmp::getModelFromLoop(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR)
+{
+	// auto &MAMProxy = AM.getResult<ModuleAnalysisManagerLoopProxy>(L, AR);
+	// // auto &FAMProxy = AM.getResult<FunctionAnalysisManagerLoopProxy>(L, AR);
+	// // auto *F = (*(L.block_begin()))->getParent();
+	// // auto &MAMProxy = FAMProxy.getCachedResult<FunctionAnalysisManagerModuleProxy>(*F);
+	// // auto &M = *(F->getParent());
+	// // auto *MM = MAMProxy.getCachedResult<ModelManagerPass>(M);
+	// // assert(MM && "ModuleManagerPass must be executed at the beginning");
+	// // return MM->getModel();
+	return nullptr;
 }

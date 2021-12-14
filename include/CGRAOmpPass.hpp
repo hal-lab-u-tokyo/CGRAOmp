@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 14-12-2021 15:47:24
+*    Last Modified: 14-12-2021 18:27:41
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -67,6 +67,7 @@ using namespace llvm;
 
 namespace CGRAOmp {
 
+
 	/**
 	 * @class ModelManager
 	 * @brief An interface for each LLVM pass to get the target CGRAModel.
@@ -91,9 +92,10 @@ namespace CGRAOmp {
 			 */
 			CGRAModel* getModel() const { return model; }
 
-			/// implemented for enabling getCacheResult from FunctionPasses
-			bool invalidate(Module& M, const PreservedAnalyses &PA,
-								ModuleAnalysisManager::Invalidator &Inv);
+			/// implemented for enabling getCacheResult from inner modules
+			template <typename IRUnitT, typename InvT>
+			bool invalidate(IRUnitT& IR, const PreservedAnalyses &PA,
+								InvT &Inv);
 		private:
 			CGRAModel* model;
 	};
@@ -110,6 +112,25 @@ namespace CGRAOmp {
 			friend AnalysisInfoMixin<ModelManagerPass>;
 			static AnalysisKey Key;
 			CGRAModel *model;
+	};
+
+	class ModelManagerFunctionProxy : public AnalysisInfoMixin<ModelManagerFunctionProxy> {
+		public:
+			using Result = ModelManager;
+			Result run(Function &F, FunctionAnalysisManager &AM);
+		private:
+			friend AnalysisInfoMixin<ModelManagerFunctionProxy>;
+			static AnalysisKey Key;
+	};
+
+	class ModelManagerLoopProxy : public AnalysisInfoMixin<ModelManagerLoopProxy> {
+		public:
+			using Result = ModelManager;
+			Result run(Loop &L, LoopAnalysisManager &AM,
+						LoopStandardAnalysisResults &AR);
+		private:
+			friend AnalysisInfoMixin<ModelManagerLoopProxy>;
+			static AnalysisKey Key;
 	};
 
 	/**

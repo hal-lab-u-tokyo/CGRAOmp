@@ -21,15 +21,16 @@
 #    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #    SOFTWARE.
 #    
-#    File:          /Passes/CGRAOmpPass/CMakeLists.txt
+#    File:          /src/Passes/CGRAOmpPass/CMakeLists.txt
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  27-08-2021 14:16:34
-#    Last Modified: 28-08-2021 18:44:03
+#    Last Modified: 14-12-2021 18:51:01
 #
 add_llvm_library( libCGRAOmpPass MODULE
   ## append source file list here
   CGRAOmpPass.cpp
+  OmpPasses.def
 
   DEPENDS
   intrinsics_gen

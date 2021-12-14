@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 14-12-2021 15:53:19
+*    Last Modified: 14-12-2021 18:53:13
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
@@ -33,6 +33,7 @@
 #include "OptionPlugin.hpp"
 #include "CGRAOmpAnnotationPass.hpp"
 
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Transforms/Scalar/LoopRotation.h"
 #include "llvm/Transforms/Utils/LCSSA.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -71,20 +72,47 @@ ModelManagerPass::run(Module &M, ModuleAnalysisManager &AM)
 	return ModelManager(model);
 }
 
-bool ModelManager::invalidate(Module& M, const PreservedAnalyses &PA,
-								ModuleAnalysisManager::Invalidator &Inv)
+template <typename IRUnitT, typename InvT>
+bool ModelManager::invalidate(IRUnitT &IR, const PreservedAnalyses &PA,
+								InvT &Inv)
 {
 	// always keeping this reuslt valid after creation
 	auto PAC = PA.getChecker<ModelManagerPass>();
 	return !PAC.preservedWhenStateless();
 }
 
+
+AnalysisKey ModelManagerFunctionProxy::Key;
+
+ModelManagerFunctionProxy::Result
+ModelManagerFunctionProxy::run(Function &F, FunctionAnalysisManager &AM)
+{
+	auto &MAMProxy = AM.getResult<ModuleAnalysisManagerFunctionProxy>(F);
+	auto &M = *(F.getParent());
+	auto *MM = MAMProxy.getCachedResult<ModelManagerPass>(M);
+	assert(MM && "ModuleManagerPass must be executed at the beginning");
+	return *MM;
+}
+
+AnalysisKey ModelManagerLoopProxy::Key;
+
+ModelManagerLoopProxy::Result
+ModelManagerLoopProxy::run(Loop &L, LoopAnalysisManager &AM,
+							LoopStandardAnalysisResults &AR)
+{
+	auto &FAMProxy = AM.getResult<FunctionAnalysisManagerLoopProxy>(L, AR);
+	auto *F = (*(L.block_begin()))->getParent();
+	auto *MM = FAMProxy.getCachedResult<ModelManagerFunctionProxy>(*F);
+	assert(MM && "ModelManagerFunctionProxy must be executed before this pass");
+	return *MM;
+}
+
+
 AnalysisKey OmpKernelAnalysisPass::Key;
 
 /**
  * @details 
 **/
-
 OmpKernelAnalysisPass::Result OmpKernelAnalysisPass::run(Module &M,
 										ModuleAnalysisManager &AM)
 {
@@ -188,6 +216,32 @@ OmpStaticShecudleAnalysis::run(Function &F, FunctionAnalysisManager &AM)
 
 #undef DEBUG_TYPE
 
+static void registerModuleAnalyses(ModuleAnalysisManager &MAM)
+{
+#define MODULE_ANALYSIS(CREATE_PASS) \
+	MAM.registerPass([&] { return CREATE_PASS; });
+
+#include "OmpPasses.def"
+
+}
+
+static void registerFunctionAnalyses(FunctionAnalysisManager &FAM)
+{
+#define FUNCTION_ANALYSIS(CREATE_PASS) \
+	FAM.registerPass([&] { return CREATE_PASS; });
+
+#include "OmpPasses.def"
+
+}
+
+static void registerLoopAnalyses(LoopAnalysisManager &LAM)
+{
+#define LOOP_ANALYSIS(CREATE_PASS) \
+	LAM.registerPass([&] { return CREATE_PASS; });
+
+#include "OmpPasses.def"
+
+}
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
 llvmGetPassPluginInfo() {
 	return {
@@ -208,26 +262,10 @@ llvmGetPassPluginInfo() {
 				}
 			);
 
-			PB.registerAnalysisRegistrationCallback(
-				[](ModuleAnalysisManager &MAM) {
-					MAM.registerPass([&] {
-						return ModelManagerPass();
-					});
-			});
+			PB.registerAnalysisRegistrationCallback(registerModuleAnalyses);
+			PB.registerAnalysisRegistrationCallback(registerFunctionAnalyses);
+			PB.registerAnalysisRegistrationCallback(registerLoopAnalyses);
 
-			PB.registerAnalysisRegistrationCallback(
-				[](ModuleAnalysisManager &MAM) {
-					MAM.registerPass([&] {
-						return OmpKernelAnalysisPass();
-					});
-			});
-
-			PB.registerAnalysisRegistrationCallback(
-				[](FunctionAnalysisManager &FAM) {
-					FAM.registerPass([&] {
-						return OmpStaticShecudleAnalysis();
-					});
-			});
 		}
 	};
 }

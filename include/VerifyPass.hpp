@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 14-12-2021 11:36:19
+*    Last Modified: 14-12-2021 18:55:54
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -43,28 +43,8 @@
 
 
 #include "CGRAOmpPass.hpp"
-
-// a macro to set MODEL a pointer to the target CGRA model
-#define GET_MODEL_FROM_FUNCTION(MODEL) auto &MAMProxy = \
-	AM.getResult<ModuleAnalysisManagerFunctionProxy>(F); \
-	auto &M = *(F.getParent()); \
-	auto *MM = MAMProxy.getCachedResult<ModelManagerPass>(M); \
-	assert(MM && "ModuleManagerPass must be executed at the beginning"); \
-	auto MODEL = MM->getModel();
-
-// #define GET_LSAR(LSAR, F) \
-// 	auto &AA = AM.getResult<AAManager>(F); \
-// 	auto &AC = AM.getResult<AssumptionAnalysis>(F); \
-// 	auto &DT = AM.getResult<DominatorTreeAnalysis>(F); \
-// 	auto &LI = AM.getResult<LoopAnalysis>(F); \
-// 	auto &SE = AM.getResult<ScalarEvolutionAnalysis>(F); \
-// 	auto &TLI = AM.getResult<TargetLibraryAnalysis>(F); \
-// 	auto &TTI = AM.getResult<TargetIRAnalysis>(F); \
-// 	BlockFrequencyInfo *BFI = &AM.getResult<BlockFrequencyAnalysis>(F); \
-// 	MemorySSA *MSSA = &AM.getResult<MemorySSAAnalysis>(F).getMSSA(); \
-// 	LoopStandardAnalysisResults LSAR = { \
-// 		AA, AC, DT, LI, SE, TLI, TTI, BFI, MSSA \
-// 	};
+#include "DecoupledAnalysis.hpp"
+#include "CGRAModel.hpp"
 
 using namespace llvm;
 
@@ -184,37 +164,8 @@ namespace CGRAOmp {
 	};
 
 	/**
-	 * @class GenericVerifyPass
-	 * @brief A function pass to verify the kernel for Generic CGRA
-	*/
-	class GenericVerifyPass : public AnalysisInfoMixin<GenericVerifyPass> {
-		public:
-			using Result = VerifyResult;
-			Result run(Function &F, FunctionAnalysisManager &AM);
-		private:
-			friend AnalysisInfoMixin<GenericVerifyPass>;
-			static AnalysisKey Key;
-
-	};
-
-	/**
-	 * @class DecoupledVerifyPass
-	 * @brief A function pass to verify the kernel for Decoupled CGRA
-	*/
-	class DecoupledVerifyPass :
-			public AnalysisInfoMixin<DecoupledVerifyPass> {
-		public:
-			using Result = VerifyResult;
-			Result run(Function &F, FunctionAnalysisManager &AM);
-		private:
-			friend AnalysisInfoMixin<DecoupledVerifyPass>;
-			static AnalysisKey Key;
-
-	};
-
-	/**
+	 * @class VerifyPassBase
 	 * @brief a template for verification pass
-	 * 
 	 * @tparam DerivedT an actual class of pass
 	 */
 	template <typename DerivedT>
@@ -237,39 +188,47 @@ namespace CGRAOmp {
 	};
 
 	/**
+	 * @class GenericVerifyPass
+	 * @brief A function pass to verify the kernel for Generic CGRA
+	*/
+	class GenericVerifyPass : public AnalysisInfoMixin<GenericVerifyPass> {
+		public:
+			using Result = VerifyResult;
+			Result run(Function &F, FunctionAnalysisManager &AM);
+		private:
+			friend AnalysisInfoMixin<GenericVerifyPass>;
+			static AnalysisKey Key;
+
+	};
+
+	class AGCompatibility;
+
+	/**
+	 * @class DecoupledVerifyPass
+	 * @brief A function pass to verify the kernel for Decoupled CGRA
+	*/
+	class DecoupledVerifyPass :
+			public VerifyPassBase<DecoupledVerifyPass> {
+		public:
+			using Result = VerifyResult;
+			Result run(Function &F, FunctionAnalysisManager &AM);
+		private:
+			friend AnalysisInfoMixin<DecoupledVerifyPass>;
+			static AnalysisKey Key;
+
+			template <typename AGVerifyPassT>
+			void AG_verification(Loop &L, LoopAnalysisManager &AM,
+								LoopStandardAnalysisResults &AR, Result &result);
+	};
+
+	/**
 	 * @class AGCompatibility
 	 * @brief A derived class from VerifyResultBase describing whether the memory access pattern is compatible with the AGs or not
 	*/
 	class AGCompatibility : public VerifyResultBase {
 		public:
-			using MemLoadList = SmallVector<LoadInst*>;
-			using MemStoreList = SmallVector<StoreInst*>;
-			AGCompatibility() : VerifyResultBase() {}
+
 			void print(raw_ostream &OS) const override {}
-
-			void setMemLoad(MemLoadList &&l) {
-				mem_load = l;
-			}
-
-			void setMemStore(MemStoreList &&l) {
-				mem_store = l;
-			}
-			MemLoadList::iterator load_begin() {
-				return mem_load.begin();
-			}
-			MemLoadList::iterator load_end() {
-				return mem_load.end();
-			}
-			MemStoreList::iterator store_begin() {
-				return mem_store.begin();
-			}
-			MemStoreList::iterator store_end() {
-				return mem_store.end();
-			}
-		protected:
-
-			MemLoadList mem_load;
-			MemStoreList mem_store;
 	};
 
 	/**
@@ -289,7 +248,7 @@ namespace CGRAOmp {
 			} config_t;
 
 		private:
-			DenseMap<Value*, SmallVector<config_t>> AG_config;
+
 	};
 
 	/**
@@ -297,28 +256,16 @@ namespace CGRAOmp {
 	 * @brief A function pass to verify the memory access pattern
 	*/
 	class VerifyAffineAGCompatiblePass :
-		public VerifyPassBase<VerifyAffineAGCompatiblePass> {
+		public AnalysisInfoMixin<VerifyAffineAGCompatiblePass> {
 		public:
 			using Result = AffineAGCompatibility;
 
-			Result run(Function &F, FunctionAnalysisManager &AM);
+			Result run(Loop &L, LoopAnalysisManager &AM,
+						LoopStandardAnalysisResults &AR);
 		private:
 			friend AnalysisInfoMixin<VerifyAffineAGCompatiblePass>;
 			static AnalysisKey Key;
 			DecoupledCGRA *dec_model;
-
-			/**
-			 * @brief verify the memory access pattern in a loop
-			 * 
-			 * @param L verfied Loop
-			 * @param AM LoopAnalysisManager
-			 * @param AR LoopStandardAnalysisResult
-			 * @param R a reference to a AffineAGCompatibility which the verified result is stored to
-			 */
-			void verify_affine_access(Loop &L, LoopAnalysisManager &AM,
-										 LoopStandardAnalysisResults &AR,
-										 Result &R);
-
 
 			/**
 			 * @brief parse the expression of addition between SCEVs
@@ -355,6 +302,8 @@ namespace CGRAOmp {
 	 */
 	LoopStandardAnalysisResults getLSAR(Function &F,
 								FunctionAnalysisManager &AM);
+
+	CGRAModel* getModelFromLoop(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR);
 
 }
 
