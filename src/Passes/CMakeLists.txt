@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  26-08-2021 20:53:10
-#    Last Modified: 15-09-2021 10:00:43
+#    Last Modified: 13-12-2021 18:59:25
 #
 
 # set LLVM version
@@ -48,11 +48,14 @@ execute_process(COMMAND llvm-config --cmakedir OUTPUT_VARIABLE LLVM_DIR)
 
 find_package(LLVM ${LLVM_MIN_VERSION} REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+# Polly is needed
+find_package(Polly REQUIRED CONFIG)
+message(STATUS "Found Polly")
 
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(AddLLVM)
 
-include_directories(${LLVM_INCLUDE_DIRS})
+include_directories(${LLVM_INCLUDE_DIRS} ${Polly_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 # list of passes to be built

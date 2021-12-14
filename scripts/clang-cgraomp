@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 17-09-2021 15:54:52
+#   Last Modified: 14-12-2021 10:38:13
 ###
 
 from argparse import ArgumentParser
@@ -54,7 +54,22 @@ BOLD_STR = "\x1b[1m{0}\x1b[0m"
 WARNING_STR = MAGENTA_STR.format(BOLD_STR.format("Warning"))
 
 OPT_FLAGS = {"-O0", "-O1", "-O2", "-O3", "-Os", "-Oz"}
-PRE_OPTS = ["-mem2reg", "-aggressive-instcombine", "-simplifycfg"]
+O2_FLAGS = ["-tti", "-tbaa", "-scoped-noalias-aa", "-assumption-cache-tracker", "-targetlibinfo", "-verify", "-ee-instrument", "-simplifycfg", "-domtree", "-sroa", "-early-cse", "-lower-expect"]
+O2_FLAGS += ["-targetlibinfo", "-tti", "-tbaa", "-scoped-noalias-aa", "-assumption-cache-tracker", "-profile-summary-info", "-annotation2metadata", "-forceattrs", "-inferattrs", "-ipsccp", "-called-value-propagation", "-globalopt", "-domtree", "-mem2reg", "-deadargelim", "-domtree", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-simplifycfg", "-basiccg", "-globals-aa", "-prune-eh", "-inline", "-openmpopt", "-function-attrs", "-domtree", "-sroa", "-basic-aa", "-aa", "-memoryssa", "-early-cse-memssa", "-speculative-execution", "-aa", "-lazy-value-info", "-jump-threading", "-correlated-propagation", "-simplifycfg", "-domtree", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-libcalls-shrinkwrap", "-loops", "-postdomtree", "-branch-prob", "-block-freq", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-pgo-memop-opt", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-tailcallelim", "-simplifycfg", "-reassociate", "-domtree", "-loops", "-loop-simplify", "-lcssa-verification", "-lcssa", "-basic-aa", "-aa", "-scalar-evolution", "-loop-rotate", "-memoryssa", "-lazy-branch-prob", "-lazy-block-freq", "-licm", "-loop-unswitch", "-simplifycfg", "-domtree", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-loop-simplify", "-lcssa-verification", "-lcssa", "-scalar-evolution", "-loop-idiom", "-indvars", "-loop-deletion", "-loop-unroll", "-sroa", "-aa", "-mldst-motion", "-phi-values", "-aa", "-memdep", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-gvn", "-phi-values", "-basic-aa", "-aa", "-memdep", "-memcpyopt", "-sccp", "-demanded-bits", "-bdce", "-aa", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-lazy-value-info", "-jump-threading", "-correlated-propagation", "-postdomtree", "-adce", "-basic-aa", "-aa", "-memoryssa", "-dse", "-loops", "-loop-simplify", "-lcssa-verification", "-lcssa", "-aa", "-scalar-evolution", "-lazy-branch-prob", "-lazy-block-freq", "-licm", "-simplifycfg", "-domtree", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-barrier", "-elim-avail-extern", "-basiccg", "-rpo-function-attrs", "-globalopt", "-globaldce", "-basiccg", "-globals-aa", "-domtree", "-float2int", "-lower-constant-intrinsics", "-domtree", "-loops", "-loop-simplify", "-lcssa-verification", "-lcssa", "-basic-aa", "-aa", "-scalar-evolution", "-loop-rotate", "-loop-accesses", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-loop-distribute", "-postdomtree", "-branch-prob", "-block-freq", "-scalar-evolution", "-basic-aa", "-aa", "-loop-accesses", "-demanded-bits", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-inject-tli-mappings", "-loop-vectorize", "-loop-simplify", "-scalar-evolution", "-aa", "-loop-accesses", "-lazy-branch-prob", "-lazy-block-freq", "-loop-load-elim", "-basic-aa", "-aa", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-simplifycfg", "-domtree", "-loops", "-scalar-evolution", "-basic-aa", "-aa", "-demanded-bits", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-inject-tli-mappings", "-slp-vectorizer", "-vector-combine", "-opt-remark-emitter", "-instcombine", "-loop-simplify", "-lcssa-verification", "-lcssa", "-scalar-evolution", "-loop-unroll", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-memoryssa", "-loop-simplify", "-lcssa-verification", "-lcssa", "-scalar-evolution", "-lazy-branch-prob", "-lazy-block-freq", "-licm", "-opt-remark-emitter", "-transform-warning", "-alignment-from-assumptions", "-strip-dead-prototypes", "-globaldce", "-constmerge", "-cg-profile", "-domtree", "-loops", "-postdomtree", "-branch-prob", "-block-freq", "-loop-simplify", "-lcssa-verification", "-lcssa", "-basic-aa", "-aa", "-scalar-evolution", "-block-freq", "-loop-sink", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instsimplify", "-div-rem-pairs", "-simplifycfg", "-annotation-remarks", "-verify"]
+
+# PRE_OPTS = [["-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine", , "-polly-canonicalize", "--polly-allow-dereference-of-all-function-parameters"], ["-instcombine", "-licm"]]
+
+POLLY_CANONICALIZE_LIKE = ["-mem2reg", "-early-cse", "-instcombine", "-simplifycfg", "-tailcallelim", "-simplifycfg", "-reassociate", "-loop-rotate", "-licm", "-indvars"]
+
+PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine",   "-loop-unroll", "--unroll-allow-partial"],
+["-simplifycfg", "-instcombine", "-polly-canonicalize"]]
+
+#POLLY_CANONICALIZE_LIKE]
+# ["-simplifycfg", "-polly-canonicalize", "-instsimplify", "-instcombine", "--indvars"]]
+#  "--loop-rotate", "-indvars", "-dce", , "-loop-simplify", "-instcombine"
+# , "-O3"], [
+# PRE_OPTS = [["-simplifycfg", "-loop-simplify",  "-loop-rotate", "-instcombine", "-mem2reg", "--frame-pointer=all"]]
+# PRE_OPTS = [["-O1"]]
 
 
 IMM_FILES = []
@@ -71,6 +86,8 @@ def parser():
     argparser.add_argument("--cgraomp-lib-path", type=str, metavar="<path>", \
             help="specify the library path to the CGRA OpenMP. " + \
             "If it is not used, a default path (INSTALL_PREFIX/lib/) will be used")
+    argparser.add_argument("--enable-cgraomp-debug", action="store_true",\
+                            help="enables debug message during CGRAOmp Passes")
     # general options
     argparser.add_argument("-o", dest="output", type=str, metavar="<file>",\
             help="write final binary to <file>")
@@ -134,7 +151,7 @@ def run(msg, cmd, childEnv = os.environ):
 def clangIn(sources, outfile, arch, extra_args):
     pass_args = [ _ for _ in extra_args ]
     cmd = ["clang", "-O0", "-S", "-emit-llvm", "-Xclang",
-            "-disable-O0-optnone", "-fopenmp" ]
+            "-disable-O0-optnone", "-fopenmp"]
 
     # color output preference
     if "-fno-diagnostics-color" not in extra_args:
@@ -160,10 +177,20 @@ def hostOpt(infile, outfile, opt_level):
     return run("Optimization of host code", cmd)
 
 def cgraPreOpt(infile, outfile):
-    cmd = ["opt", "-S"]
-    cmd += PRE_OPTS
-    cmd += [infile, "-o", outfile]
-    return run("Pre-Optimization of CGRA kernel code", cmd)
+    for config in PRE_OPTS:
+        cmd = ["opt", "-S"]
+        cmd += config
+        cmd += ["--debug-pass=Arguments"]
+        cmd += [infile, "-o", outfile]
+        print(cmd)
+        ret = run("Pre-Optimization of CGRA kernel code", cmd)
+        if not ret:
+            return ret
+
+    # cmd = ["opt", "-S"]
+    # cmd += ["-O2"]
+    # cmd += [infile, "-o", outfile]
+    return ret
 
 def unbundle(source, host_out, cgra_out, arch):
     cmd = ["clang-offload-bundler", "--unbundle", \
@@ -231,6 +258,8 @@ def main():
                      args.arch):
         add_imm(host_unbundle_name)
         add_imm(cgra_unbundle_name)
+    else:
+        return
 
     # optimize host IR
     if not hostOpt(host_unbundle_name, host_unbundle_name, args.opt):
@@ -245,8 +274,13 @@ def main():
     libpath = default_libdir if args.cgraomp_lib_path is None else \
                     args.cgraomp_lib_path
 
+    if args.enable_cgraomp_debug:
+        options = ["-debug-only=cgraomp,loopnest,cgraomp-verbose"]
+    else:
+        options = []
+
     if passCGRAOmp(cgra_unbundle_name, cgra_post_name, libpath, \
-                        args.cgra_config, []):
+                        args.cgra_config, options):
         add_imm(cgra_post_name)
     else:
         return

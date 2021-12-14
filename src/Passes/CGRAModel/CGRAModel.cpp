@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:46
-*    Last Modified: 15-09-2021 12:48:29
+*    Last Modified: 10-12-2021 11:29:40
 */
 #include "CGRAModel.hpp"
 
@@ -39,6 +39,7 @@ using namespace llvm;
 using namespace CGRAOmp;
 using namespace std;
 
+// generator table for each AG type
 static StringMap<AGGen_t> AG_gen({
 	std::make_pair("affine", createAffineAG),
 });

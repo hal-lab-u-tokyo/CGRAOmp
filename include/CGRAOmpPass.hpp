@@ -25,24 +25,44 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 15-09-2021 11:33:32
+*    Last Modified: 10-12-2021 14:55:44
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
 
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/IR/Value.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/Support/Error.h"
 
 #include "CGRAModel.hpp"
 
+#define OMP_STATIC_INIT_SCHED		2
+#define OMP_STATIC_INIT_PLASTITER	3
+#define OMP_STATIC_INIT_PLOWER		4
+#define OMP_STATIC_INIT_PUPPER		5
+#define OMP_STATIC_INIT_PSTRIDE		6
+#define OMP_STATIC_INIT_INCR		7
+#define OMP_STATIC_INIT_CHUNK		8
+#define OMP_STATIC_INIT_OPERAND_N	(OMP_STATIC_INIT_CHUNK + 1)
 
 #include <system_error>
 
 using namespace llvm;
 
 #define ERR_MSG_PREFIX "CGRAOmpPass \x1B[31m\033[1mError\033[0m: "
+#define INFO_DEBUG_PREFIX "\t[INFO]: "
+#define WARN_DEBUG_PREFIX "\t[WARN]: "
+#define ERR_DEBUG_PREFIX "\t[ERROR]: "
+#define KERNEL_INFO_PREFIX ".omp_offloading.entry"
+#define ADD_FUNC_PASS(P) (createModuleToFunctionPassAdaptor(P))
+#define ADD_LOOP_PASS(P) (createModuleToFunctionPassAdaptor(createFunctionToLoopPassAdaptor(P)))
 
 namespace CGRAOmp {
 
@@ -91,6 +111,95 @@ namespace CGRAOmp {
 			CGRAModel *model;
 	};
 
+	/**
+	 * @class OmpKernelAnalysisPass
+	 * @brief A module pass to find functions annotated as OpenMP kernels
+	*/
+	class OmpKernelAnalysisPass :
+			public AnalysisInfoMixin<OmpKernelAnalysisPass> {
+		public:
+			using Result = StringMap<Function*>;
+			Result run(Module &M, ModuleAnalysisManager &AM);
+		private:
+			friend AnalysisInfoMixin<OmpKernelAnalysisPass>;
+			static AnalysisKey Key;
+	};
+
+	class OmpStaticShecudleAnalysis:
+			public AnalysisInfoMixin<OmpStaticShecudleAnalysis> {
+		public:
+			class ScheduleInfo {
+				using Info_t = SetVector<Value*>;
+				public:
+					ScheduleInfo(Value *schedule_type,
+								 Value *last_iter_flag,
+								 Value *lower_bound,
+								 Value *upper_bound,
+								 Value *stride,
+								 Value *increment,
+								 Value *chunk) {
+						info.insert(schedule_type);
+						info.insert(last_iter_flag);
+						info.insert(lower_bound);
+						info.insert(upper_bound);
+						info.insert(stride);
+						info.insert(increment);
+						info.insert(chunk);
+						valid = true;
+					};
+					ScheduleInfo() {
+						valid = false;
+						for (int i = 0; i < OMP_STATIC_INIT_OPERAND_N; i++) {
+							info.insert(nullptr);
+						}
+					};
+					explicit operator bool() const noexcept {
+						return valid;
+					}
+					Info_t::iterator begin() {
+						return info.begin();
+					}
+					Info_t::iterator end() {
+						return info.end();
+					}
+					bool contains(Value* V) {
+						return info.contains(V);
+					}
+
+					Value* get_schedule_type() {
+						return info[0];
+					}
+					Value* get_last_iter_flag() {
+						return info[1];
+					}
+					Value* get_lower_bound() {
+						return info[2];
+					}
+					Value* get_upper_bound() {
+						return info[3];
+					}
+					Value* get_stride() {
+						return info[4];
+					}
+					Value* get_increment() {
+						return info[5];
+					}
+					Value* get_chunk() {
+						return info[6];
+					}
+				private:
+					Info_t info;
+					bool valid;
+			};
+			// using Result = Expected<ScheduleInfo>;
+			using Result = ScheduleInfo;
+			Result run(Loop &L, LoopAnalysisManager &AM,
+						LoopStandardAnalysisResults &AR);
+
+		private:
+			friend AnalysisInfoMixin<OmpStaticShecudleAnalysis>;
+			static AnalysisKey Key;
+	};
 }
 
 #endif //CGRAOmpPass_H

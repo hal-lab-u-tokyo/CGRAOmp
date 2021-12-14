@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:30
-*    Last Modified: 15-09-2021 11:50:57
+*    Last Modified: 17-09-2021 16:49:48
 */
 #ifndef CGRAModel_H
 #define CGRAModel_H
@@ -170,11 +170,22 @@ namespace CGRAOmp
 			 */
 			InstMapEntry* isSupported(Instruction *I);
 
+			/**
+			 * @brief an interface to down cast to derived classes
+			 * 
+			 * @tparam DerivedT derived class named
+			 * @return DerivedT* casted pointer to the derived class
+			 */
 			template <typename DerivedT>
 			DerivedT* asDerived() {
 				return dyn_cast<DerivedT>(this);
 			}
 
+			/**
+			 * @brief Get the category of the CGRA
+			 * 
+			 * @return CGRACategory 
+			 */
 			CGRACategory getKind() const {
 				return category;
 			}
