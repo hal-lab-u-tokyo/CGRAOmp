@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 10-12-2021 17:28:14
+*    Last Modified: 14-12-2021 11:36:19
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -197,7 +197,6 @@ namespace CGRAOmp {
 
 	};
 
-
 	/**
 	 * @class DecoupledVerifyPass
 	 * @brief A function pass to verify the kernel for Decoupled CGRA
@@ -211,6 +210,30 @@ namespace CGRAOmp {
 			friend AnalysisInfoMixin<DecoupledVerifyPass>;
 			static AnalysisKey Key;
 
+	};
+
+	/**
+	 * @brief a template for verification pass
+	 * 
+	 * @tparam DerivedT an actual class of pass
+	 */
+	template <typename DerivedT>
+	class VerifyPassBase : public AnalysisInfoMixin<DerivedT> {
+		public:
+			using LoopList = SmallVector<Loop*>;
+		protected:
+
+			/**
+			 * @brief search for perfectly nested loops in the function
+			 * If a nested loop structure contains more than one innermost loops,
+			 * this regards there is no perfectly nested loop.
+			 * 
+			 * @param F function
+			 * @param AR LoopStandardAnalysisResults
+			 * @return LoopList: a list of loop
+			 */
+			LoopList findPerfectlyNestedLoop(Function &F,
+				LoopStandardAnalysisResults &AR);
 	};
 
 	/**
@@ -274,10 +297,9 @@ namespace CGRAOmp {
 	 * @brief A function pass to verify the memory access pattern
 	*/
 	class VerifyAffineAGCompatiblePass :
-		public AnalysisInfoMixin<VerifyAffineAGCompatiblePass> {
+		public VerifyPassBase<VerifyAffineAGCompatiblePass> {
 		public:
 			using Result = AffineAGCompatibility;
-			using LoopList = SmallVector<Loop*>;
 
 			Result run(Function &F, FunctionAnalysisManager &AM);
 		private:
@@ -297,15 +319,6 @@ namespace CGRAOmp {
 										 LoopStandardAnalysisResults &AR,
 										 Result &R);
 
-			/**
-			 * @brief search for perfectly nested loops in the function
-			 * 
-			 * @param F function
-			 * @param AR LoopStandardAnalysisResults
-			 * @return LoopList: a list of loop
-			 */
-			LoopList findPerfectlyNestedLoop(Function &F,
-				LoopStandardAnalysisResults &AR);
 
 			/**
 			 * @brief parse the expression of addition between SCEVs

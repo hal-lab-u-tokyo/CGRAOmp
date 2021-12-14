@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 13-12-2021 15:59:40
+*    Last Modified: 14-12-2021 15:47:30
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -38,70 +38,25 @@
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/LoopNestAnalysis.h"
+#include "llvm/Support/Error.h"
 
 #include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
 
 #include "VerifyPass.hpp"
 #include "CGRAOmpAnnotationPass.hpp"
+#include "DecoupledAnalysis.hpp"
+
+#include <system_error>
 
 using namespace llvm;
 using namespace CGRAOmp;
 
 #define DEBUG_TYPE "cgraomp"
 
- static const char *VerboseDebug = DEBUG_TYPE "-verbose";
- static CmpInst *getOuterLoopLatchCmp(const Loop &OuterLoop) {
-  
-   const BasicBlock *Latch = OuterLoop.getLoopLatch();
-   assert(Latch && "Expecting a valid loop latch");
-  
-   const BranchInst *BI = dyn_cast<BranchInst>(Latch->getTerminator());
-   assert(BI && BI->isConditional() &&
-          "Expecting loop latch terminator to be a branch instruction");
-  
-   CmpInst *OuterLoopLatchCmp = dyn_cast<CmpInst>(BI->getCondition());
-   DEBUG_WITH_TYPE(
-       VerboseDebug, if (OuterLoopLatchCmp) {
-         dbgs() << "Outer loop latch compare instruction: " << *OuterLoopLatchCmp
-                << "\n";
-       });
-   return OuterLoopLatchCmp;
- }
-  
- static CmpInst *getInnerLoopGuardCmp(const Loop &InnerLoop) {
-  
-   BranchInst *InnerGuard = InnerLoop.getLoopGuardBranch();
-   CmpInst *InnerLoopGuardCmp =
-       (InnerGuard) ? dyn_cast<CmpInst>(InnerGuard->getCondition()) : nullptr;
-  
-   DEBUG_WITH_TYPE(
-       VerboseDebug, if (InnerLoopGuardCmp) {
-         dbgs() << "Inner loop guard compare instruction: " << *InnerLoopGuardCmp
-                << "\n";
-       });
-   return InnerLoopGuardCmp;
- }
-  
- static bool checkSafeInstruction(const Instruction &I,
-                                  const CmpInst *InnerLoopGuardCmp,
-                                  const CmpInst *OuterLoopLatchCmp,
-                                  Optional<Loop::LoopBounds> OuterLoopLB) {
-  
-   bool IsAllowed =
-       isSafeToSpeculativelyExecute(&I) || isa<PHINode>(I) || isa<BranchInst>(I);
-   if (!IsAllowed)
-     return false;
-   // The only binary instruction allowed is the outer loop step instruction,
-   // the only comparison instructions allowed are the inner loop guard
-   // compare instruction and the outer loop latch compare instruction.
-   if ((isa<BinaryOperator>(I) && &I != &OuterLoopLB->getStepInst()) ||
-       (isa<CmpInst>(I) && &I != OuterLoopLatchCmp && &I != InnerLoopGuardCmp)) {
-     return false;
-   }
-   return true;
- }
- 
+static const char *VerboseDebug = DEBUG_TYPE "-verbose";
+
+
 /* ===================== Implementation of VerifyResult ===================== */
 
 void VerifyResult::print(raw_ostream &OS) const
@@ -150,6 +105,14 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 	GET_MODEL_FROM_FUNCTION(model);
 	auto dec_model = model->asDerived<DecoupledCGRA>();
 
+	// ensure OmpStaticShecudleAnalysis result is cached for DecoupledAnalysis
+	auto SI = AM.getResult<OmpStaticShecudleAnalysis>(F);
+	if (!SI) {
+		ExitOnError Exit(ERR_MSG_PREFIX);
+		std::error_code EC;
+		Exit(make_error<StringError>("Fail to find OpenMP scheduling info", EC));
+	}
+
 	switch (dec_model->getAG()->getKind()) {
 		case AddressGenerator::Kind::Affine:
 			{ auto ag_comapt = AM.getResult<VerifyAffineAGCompatiblePass>(F); }
@@ -162,118 +125,41 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 	return result;
 }
 
-/* ============= Implementation of VerifyAffineAGCompatiblePass ============= */
-AnalysisKey VerifyAffineAGCompatiblePass::Key;
-
-AffineAGCompatibility VerifyAffineAGCompatiblePass::run(Function &F,
-											FunctionAnalysisManager &AM)
-{
-	Result result;
-	GET_MODEL_FROM_FUNCTION(model);
-	auto dec_model = model->asDerived<DecoupledCGRA>();
-
-
-	// get outer most loops
-	auto AR = getLSAR(F, AM);
-	auto &LPM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
-
-	auto loop_kernels = findPerfectlyNestedLoop(F, AR);
-
-	if (loop_kernels.size() == 0) {
-		LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << "Cannot find any valid loop kernels\n");
-	}
-
-	// verify each memory access
-	for (auto L : loop_kernels) {
-		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
-					<< "Verifying Affine AG compatibility of a loop: "
-					<< L->getName() << "\n");
-		verify_affine_access(*L, LPM, AR, result);
-	}
-
-	return result;
-}
-
-
-
-VerifyAffineAGCompatiblePass::LoopList
-VerifyAffineAGCompatiblePass::findPerfectlyNestedLoop(Function &F,
+/* ================= Implementation of VerifyPassBase ================= */
+/**
+ * @details 
+ * This routine finds maximum perfectly nested loops in the function
+ * The followings are some examples:
+ * @code
+ * for (...) {
+ *   for (...) { // <- found as the perfect nested loop
+ *     for (...) {
+ *        ....
+ *     }
+ *   }
+ *   some statements...
+ * }
+ * @endcode
+*/
+template <typename DerivedT>
+SmallVector<Loop*> VerifyPassBase<DerivedT>::findPerfectlyNestedLoop(Function &F,
 										 LoopStandardAnalysisResults &AR)
 {
 	SmallVector<Loop*> loop_kernels;
 	for (Loop *outerLoop : AR.LI) {
-		//
-		errs() << "indvars\n";
-		if (auto *v = outerLoop->getInductionVariable(AR.SE)) {
-			v->dump();
-			InductionDescriptor IndDesc;
-			if (InductionDescriptor::isInductionPHI(v, outerLoop, &(AR.SE), IndDesc)) {
-				errs() << "OK\n";
-			}
-			Value *InitialIVValue = IndDesc.getStartValue();
-			Instruction *StepInst = IndDesc.getInductionBinOp();
-			if (!InitialIVValue)
-				errs() << "there is no init val\n";
-			if (!StepInst)
-				errs() << "there is no step val\n";
-
-		} else {
-			errs() << "None\n";
-			errs() << "simplified? " << outerLoop->isLoopSimplifyForm() << "\n";
-		}
+		DEBUG_WITH_TYPE(VerboseDebug, dbgs() << DBG_DEBUG_PREFIX
+						<< "Analyzing loop nest structure of " <<
+						outerLoop->getName() << "\n");
 		// get LoopNest analysis
 		auto LN = LoopNest::getLoopNest(*outerLoop, AR.SE);
-		int depth = LN->getNestDepth();
-		//errs() << "depth " << depth << "\n";
-		errs() << "outer most: " << outerLoop->getName() << "\n";
+		// int depth = LN->getNestDepth();
 
-		// for (auto l : LN->getPerfectLoops(AR.SE)) {
-
-		// }
-		//find maximum perfectly nested loops by bottom-up
+		//find maximum perfectly nested loops from the innermost to the outermost
 		if (auto innermost = LN->getInnermostLoop()) {
-			// check safety
-			auto OuterLoopLB = outerLoop->getBounds(AR.SE);
-			CmpInst *OuterLoopLatchCmp = getOuterLoopLatchCmp(*outerLoop);
-			CmpInst *InnerLoopGuardCmp = getInnerLoopGuardCmp(*innermost);
-			if (InnerLoopGuardCmp) {
-				InnerLoopGuardCmp->dump();
-			}
-			auto containsOnlySafeInstructions = [&](const BasicBlock &BB) {
-				return llvm::all_of(BB, [&](const Instruction &I) {
-				bool IsSafeInstr = checkSafeInstruction(I, InnerLoopGuardCmp,
-														OuterLoopLatchCmp, OuterLoopLB);
-				if (!IsSafeInstr) {
-					DEBUG_WITH_TYPE(VerboseDebug, {
-					dbgs() << "Instruction: " << I << "\nin basic block:" << BB.getName()
-							<< " is unsafe.\n";
-					});
-				}
-				return IsSafeInstr;
-				});
-			};
-			
-			// Check the code surrounding the inner loop for instructions that are deemed
-			// unsafe.
-			const BasicBlock *OuterLoopHeader = outerLoop->getHeader();
-			const BasicBlock *OuterLoopLatch = outerLoop->getLoopLatch();
-			const BasicBlock *InnerLoopPreHeader = innermost->getLoopPreheader();
-			errs() << "check unsafe " << OuterLoopHeader->getName() << "\n";
-			auto olp_unsafe = !containsOnlySafeInstructions(*OuterLoopHeader);
-			errs() << "check unsafe " << OuterLoopLatch->getName() << "\n";
-			auto oll_unsafe = !containsOnlySafeInstructions(*OuterLoopLatch);
-			errs() << olp_unsafe << " " << oll_unsafe << "\n";
-			if (olp_unsafe || oll_unsafe || (InnerLoopPreHeader != OuterLoopHeader &&
-					!containsOnlySafeInstructions(*InnerLoopPreHeader)) ||
-				!containsOnlySafeInstructions(*(innermost->getExitBlock()))) {
-				LLVM_DEBUG(dbgs() << "Not perfectly nested: code surrounding inner loop is "
-									"unsafe\n";);
-			}
-			//errs() << "innermost " << innermost->getName() << "\n";
 			for (Loop *inL : LN->getLoops()) {
 				auto inLN = LoopNest::getLoopNest(*inL, AR.SE);
-				//errs() << inL->getName() << " " << inLN->getNestDepth() <<  " " << inLN->getMaxPerfectDepth() << "\n";
 				int max_nest = inLN->getMaxPerfectDepth();
+
 				if (inLN->getNestDepth() == inLN->getMaxPerfectDepth()) {
 					LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << 
 						"Detected perfectly nested loop: " << inL->getName() << 
@@ -291,56 +177,92 @@ VerifyAffineAGCompatiblePass::findPerfectlyNestedLoop(Function &F,
 	return std::move(loop_kernels);
 }
 
+/* ============= Implementation of VerifyAffineAGCompatiblePass ============= */
+AnalysisKey VerifyAffineAGCompatiblePass::Key;
+
+AffineAGCompatibility VerifyAffineAGCompatiblePass::run(Function &F,
+											FunctionAnalysisManager &AM)
+{
+	Result result;
+	GET_MODEL_FROM_FUNCTION(model);
+	auto dec_model = model->asDerived<DecoupledCGRA>();
+
+	// get outer most loops
+	auto AR = getLSAR(F, AM);
+	auto &LPM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+
+	auto loop_kernels = findPerfectlyNestedLoop(F, AR);
+
+	if (loop_kernels.size() == 0) {
+		LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << "Cannot find any valid loop kernels\n");
+		return result;
+	}
+
+	// verify each memory access
+	for (auto L : loop_kernels) {
+		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
+					<< "Verifying Affine AG compatibility of a loop: "
+					<< L->getName() << "\n");
+		auto DA = LPM.getResult<DecoupledAnalysisPass>(*L, AR);
+
+		verify_affine_access(*L, LPM, AR, result);
+	}
+
+	return result;
+}
+
+
 void VerifyAffineAGCompatiblePass::verify_affine_access(Loop &L,
 								LoopAnalysisManager &AM,
 								LoopStandardAnalysisResults &AR, Result &R)
 {
-	OmpStaticShecudleAnalysis::ScheduleInfo si;
-	//outer most loop
-	for (Loop *l : AR.LI) {
-		if (l->getLoopDepth() == 1) {
-			auto LN = LoopNest::getLoopNest(*l, AR.SE);
-			si = AM.getResult<OmpStaticShecudleAnalysis>(*l, AR);
-			if (si) {
-				// get valid schedule info
-			} else {
-				// fail to get schedule info
-				LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << "Fail to get scheduling info");
-			}
-		}
-	}
-	auto LN = LoopNest::getLoopNest(L, AR.SE);
-	auto innermost = LN->getInnermostLoop();
-	auto preheader = innermost->getLoopPreheader();
-	assert(innermost && "Innermost loop is not found");
+	auto DA = AM.getResult<DecoupledAnalysisPass>(L, AR);
 
-	SmallVector<LoadInst*> mem_load;
-	SmallVector<StoreInst*> mem_store;
+	// //for each outermost loop
+	// for (Loop *l : AR.LI) {
+	// 	if (l->getLoopDepth() == 1) {
+	// 		auto LN = LoopNest::getLoopNest(*l, AR.SE);
+	// 		si = AM.getResult<OmpStaticShecudleAnalysis>(*l, AR);
+	// 		if (si) {
+	// 			// get valid schedule info
+	// 		} else {
+	// 			// fail to get schedule info
+	// 			LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << "Fail to get scheduling info");
+	// 		}
+	// 	}
+	// }
+	// auto LN = LoopNest::getLoopNest(L, AR.SE);
+	// auto innermost = LN->getInnermostLoop();
+	// auto preheader = innermost->getLoopPreheader();
+	// assert(innermost && "Innermost loop is not found");
 
-	auto& AA = AR.AA;
+	// SmallVector<LoadInst*> mem_load;
+	// SmallVector<StoreInst*> mem_store;
 
-	// search for memory access for computation
-	for (auto &BB : innermost->getBlocks()) {
-		for (auto &I : *BB) {
-			if (auto ld = dyn_cast<LoadInst>(&I)) {
-				if (!si.contains(ld->getOperand(0))) {
-					mem_load.push_back(ld);
-				} // otherwise, it is an information about loop scheduling
-				  // thus, it must not be treated as input data for data flow
-			} else if (auto st = dyn_cast<StoreInst>(&I)) {
-				mem_store.push_back(st);
-			}
-		}
-	}
+	// auto& AA = AR.AA;
+
+	// // search for memory access for computation
+	// for (auto &BB : innermost->getBlocks()) {
+	// 	for (auto &I : *BB) {
+	// 		if (auto ld = dyn_cast<LoadInst>(&I)) {
+	// 			if (!si.contains(ld->getOperand(0))) {
+	// 				mem_load.push_back(ld);
+	// 			} // otherwise, it is an information about loop scheduling
+	// 			  // thus, it must not be treated as input data for data flow
+	// 		} else if (auto st = dyn_cast<StoreInst>(&I)) {
+	// 			mem_store.push_back(st);
+	// 		}
+	// 	}
+	// }
 
 	// load pattern
-	check_all<0>(mem_load, AR.SE);
-	// 
-	check_all<1>(mem_store, AR.SE);
+	check_all<0>(DA.get_loads(), AR.SE);
+	// store pattern
+	check_all<1>(DA.get_stores(), AR.SE);
 
-	//save the momory access insts
-	R.setMemLoad(std::move(mem_load));
-	R.setMemStore(std::move(mem_store));
+	// //save the momory access insts
+	// R.setMemLoad(std::move(mem_load));
+	// R.setMemStore(std::move(mem_store));
 }
 
 template<int N, typename T>
@@ -487,31 +409,4 @@ LoopStandardAnalysisResults CGRAOmp::getLSAR(Function &F,
 	return LoopStandardAnalysisResults(
 		{AA, AC, DT, LI, SE, TLI, TTI, BFI, MSSA}
 	);
-}
-
-extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
-llvmGetPassPluginInfo() {
-	return {
-		LLVM_PLUGIN_API_VERSION, "CGRAOmp", "v0.1",
-		[](PassBuilder &PB) {
-			PB.registerAnalysisRegistrationCallback(
-				[](FunctionAnalysisManager &FAM) {
-					FAM.registerPass([&] {
-						return GenericVerifyPass();
-					});
-			});
-			PB.registerAnalysisRegistrationCallback(
-				[](FunctionAnalysisManager &FAM) {
-					FAM.registerPass([&] {
-						return DecoupledVerifyPass();
-					});
-			});
-			PB.registerAnalysisRegistrationCallback(
-				[](FunctionAnalysisManager &FAM) {
-					FAM.registerPass([&] {
-						return VerifyAffineAGCompatiblePass();
-					});
-			});
-		}
-	};
 }

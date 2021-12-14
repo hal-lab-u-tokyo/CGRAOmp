@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 14-12-2021 10:35:55
+*    Last Modified: 14-12-2021 15:53:19
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
@@ -36,6 +36,7 @@
 #include "llvm/Transforms/Scalar/LoopRotation.h"
 #include "llvm/Transforms/Utils/LCSSA.h"
 #include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include "llvm/ADT/Statistic.h"
 
@@ -46,6 +47,7 @@ using namespace llvm;
 using namespace CGRAOmp;
 
 #define DEBUG_TYPE "cgraomp"
+static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
 // # of successfully exracted DFGs
 STATISTIC(num_dfg, "the number of extracted DFGs");
@@ -129,15 +131,22 @@ OmpKernelAnalysisPass::Result OmpKernelAnalysisPass::run(Module &M,
 	return result;
 }
 
+bool OmpScheduleInfo::invalidate(Function &F, const PreservedAnalyses &PA,
+								FunctionAnalysisManager::Invalidator &Inv)
+{
+	auto PAC = PA.getChecker<OmpStaticShecudleAnalysis>();
+	return !PAC.preservedWhenStateless();
+}
+
+
 AnalysisKey OmpStaticShecudleAnalysis::Key;
 
 OmpStaticShecudleAnalysis::Result
-OmpStaticShecudleAnalysis::run(Loop &L, LoopAnalysisManager &AM,
-						LoopStandardAnalysisResults &AR)
+OmpStaticShecudleAnalysis::run(Function &F, FunctionAnalysisManager &AM)
 {
-	// find __kmpc_for_static_init
+	// find calling __kmpc_for_static_init*
 	CallBase *init_call = nullptr;
-	for (auto &BB : *(L.getHeader()->getFirstNonPHI()->getFunction())) {
+	for (auto &BB : F) {
 		for (auto &I : BB) {
 			if (auto call_inst = dyn_cast<CallBase>(&I)) {
 				auto F = call_inst->getCalledFunction();
@@ -154,8 +163,12 @@ OmpStaticShecudleAnalysis::run(Loop &L, LoopAnalysisManager &AM,
 
 	if (init_call &&
 			init_call->getNumOperands() >= OMP_STATIC_INIT_OPERAND_N) {
-		errs() << init_call->getNumOperands() << "\n";
-		ScheduleInfo info(
+		DEBUG_WITH_TYPE(VerboseDebug,
+						dbgs() << formatv("{0}Number of arguments of {1} is {2}\n",
+						DBG_DEBUG_PREFIX,
+						init_call->getCalledFunction()->getName(),
+						init_call->getNumArgOperands()));
+		OmpScheduleInfo info(
 			init_call->getOperand(OMP_STATIC_INIT_SCHED),
 			init_call->getOperand(OMP_STATIC_INIT_PLASTITER),
 			init_call->getOperand(OMP_STATIC_INIT_PLOWER),
@@ -166,7 +179,8 @@ OmpStaticShecudleAnalysis::run(Loop &L, LoopAnalysisManager &AM,
 		);
 		return info;
 	} else {
-		ScheduleInfo invalid_info;
+		OmpScheduleInfo invalid_info;
+		LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << "call of \"__kmpc_for_static_init\" is not found\n");
 		return invalid_info;
 	}
 
@@ -209,8 +223,8 @@ llvmGetPassPluginInfo() {
 			});
 
 			PB.registerAnalysisRegistrationCallback(
-				[](LoopAnalysisManager &LAM) {
-					LAM.registerPass([&] {
+				[](FunctionAnalysisManager &FAM) {
+					FAM.registerPass([&] {
 						return OmpStaticShecudleAnalysis();
 					});
 			});

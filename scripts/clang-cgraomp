@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 14-12-2021 10:38:13
+#   Last Modified: 14-12-2021 16:15:49
 ###
 
 from argparse import ArgumentParser
@@ -61,8 +61,8 @@ O2_FLAGS += ["-targetlibinfo", "-tti", "-tbaa", "-scoped-noalias-aa", "-assumpti
 
 POLLY_CANONICALIZE_LIKE = ["-mem2reg", "-early-cse", "-instcombine", "-simplifycfg", "-tailcallelim", "-simplifycfg", "-reassociate", "-loop-rotate", "-licm", "-indvars"]
 
-PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine",   "-loop-unroll", "--unroll-allow-partial"],
-["-simplifycfg", "-instcombine", "-polly-canonicalize"]]
+PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine",   "-loop-unroll", "--unroll-allow-partial",
+"-simplifycfg", "-instcombine", "-polly-canonicalize"]]
 
 #POLLY_CANONICALIZE_LIKE]
 # ["-simplifycfg", "-polly-canonicalize", "-instsimplify", "-instcombine", "--indvars"]]
@@ -119,7 +119,7 @@ def parser():
 
     return args
 
-def run(msg, cmd, childEnv = os.environ):
+def run(msg, cmd, verbose = False, childEnv = os.environ):
     # print(reduce(lambda x, y: x + " " + y, cmd))
     msg_fmt = "{{0:<{0}}}: ".format(int(get_terminal_size().columns / 1.5 ))
     print(msg_fmt.format(msg), file=sys.stdout, flush = True, end = "")
@@ -138,6 +138,9 @@ def run(msg, cmd, childEnv = os.environ):
         print("[" + RED_STR.format("FAILED") + "]", \
                     file = sys.stdout, flush = True)
 
+    if verbose:
+        print("command: ", cmd)
+
     if len(proc_err) > 0:
         sys.stderr.buffer.write(proc_err)
         sys.stderr.buffer.flush()
@@ -148,7 +151,7 @@ def run(msg, cmd, childEnv = os.environ):
 
     return ret_code == 0
 
-def clangIn(sources, outfile, arch, extra_args):
+def clangIn(sources, outfile, arch, extra_args, verbose):
     pass_args = [ _ for _ in extra_args ]
     cmd = ["clang", "-O0", "-S", "-emit-llvm", "-Xclang",
             "-disable-O0-optnone", "-fopenmp"]
@@ -170,38 +173,35 @@ def clangIn(sources, outfile, arch, extra_args):
     cmd.extend(sources)
     cmd.extend(["-o", outfile])
 
-    return run("Clang front-end", cmd)
+    return run("Clang front-end", cmd, verbose)
 
 def hostOpt(infile, outfile, opt_level):
     cmd = ["opt", opt_level, infile, "-S", "-o", outfile]
     return run("Optimization of host code", cmd)
 
-def cgraPreOpt(infile, outfile):
+def cgraPreOpt(infile, outfile, verbose):
     for config in PRE_OPTS:
         cmd = ["opt", "-S"]
         cmd += config
-        cmd += ["--debug-pass=Arguments"]
+#        cmd += ["--debug-pass=Arguments"]
         cmd += [infile, "-o", outfile]
-        print(cmd)
-        ret = run("Pre-Optimization of CGRA kernel code", cmd)
+        ret = run("Pre-Optimization of CGRA kernel code", cmd, verbose)
         if not ret:
             return ret
 
-    # cmd = ["opt", "-S"]
-    # cmd += ["-O2"]
-    # cmd += [infile, "-o", outfile]
     return ret
 
-def unbundle(source, host_out, cgra_out, arch):
+def unbundle(source, host_out, cgra_out, arch, verbose):
     cmd = ["clang-offload-bundler", "--unbundle", \
             "--inputs={0}".format(source), "-type=ll", \
             "--outputs={0},{1}".format(host_out, cgra_out), \
             "--targets=host-{0},{1}".format(\
                     TARGET_FMT.format(target = arch),
                     OMP_TARGET_FMT.format(target = arch))]
-    return run("OpenMP target unbundling", cmd)
+    return run("OpenMP target unbundling", cmd, verbose)
 
-def passCGRAOmp(infile, outfile, libpath, config, options):
+def passCGRAOmp(infile, outfile, libpath, config, options, verbose):
+
     cmd = ["opt", "-S"]
     cmd += ["-load", f"{libpath}/libCGRAOmpComponents.so"]
     cmd += ["--enable-new-pm"]
@@ -215,7 +215,7 @@ def passCGRAOmp(infile, outfile, libpath, config, options):
     cmd += ["-o", outfile]
     cmd += options
     return run("Verify kernel, extract DFG, and insert runtime",\
-                cmd)
+                cmd, verbose)
 
 def main():
     args = parser()
@@ -246,7 +246,7 @@ def main():
     # compile C source to bundled LLVM-IR
     bundled_name = "{0}/{1}.bundled.ll".format(tmp_dirs,temp_basename)
     if clangIn(args.files, bundled_name, args.arch, \
-                     args.clang_args):
+                     args.clang_args, args.verbose):
         add_imm(bundled_name)
     else:
         return
@@ -255,7 +255,7 @@ def main():
     host_unbundle_name = "{0}/{1}.host.ll".format(tmp_dirs,temp_basename)
     cgra_unbundle_name = "{0}/{1}.cgra.ll".format(tmp_dirs,temp_basename)
     if unbundle(bundled_name, host_unbundle_name, cgra_unbundle_name,\
-                     args.arch):
+                     args.arch, args.verbose):
         add_imm(host_unbundle_name)
         add_imm(cgra_unbundle_name)
     else:
@@ -266,7 +266,7 @@ def main():
         return
 
     # pre-optimize kernel IR
-    if not cgraPreOpt(cgra_unbundle_name, cgra_unbundle_name):
+    if not cgraPreOpt(cgra_unbundle_name, cgra_unbundle_name, args.verbose):
         return
 
     # run CGRAOmp Passes
@@ -275,12 +275,12 @@ def main():
                     args.cgraomp_lib_path
 
     if args.enable_cgraomp_debug:
-        options = ["-debug-only=cgraomp,loopnest,cgraomp-verbose"]
+        options = ["-debug-only=cgraomp" + (",cgraomp-verbose" if args.verbose else "")]
     else:
         options = []
 
     if passCGRAOmp(cgra_unbundle_name, cgra_post_name, libpath, \
-                        args.cgra_config, options):
+                        args.cgra_config, options, args.verbose):
         add_imm(cgra_post_name)
     else:
         return

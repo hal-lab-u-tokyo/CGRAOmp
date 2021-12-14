@@ -25,11 +25,13 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  15-09-2021 09:53:01
-#    Last Modified: 15-09-2021 09:53:01
+#    Last Modified: 14-12-2021 13:46:09
 #
 add_llvm_library( libCGRAOmpAnnotationPass MODULE
   ## append source file list here
   CGRAOmpAnnotationPass.cpp
+  RegisterPass.cpp
+  AnnotationPasses.def
 
   DEPENDS
   intrinsics_gen

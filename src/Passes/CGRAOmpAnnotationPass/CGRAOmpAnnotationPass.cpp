@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-09-2021 09:52:46
-*    Last Modified: 15-09-2021 11:30:07
+*    Last Modified: 14-12-2021 13:37:05
 */
 
 #include "CGRAOmpAnnotationPass.hpp"
@@ -92,25 +92,4 @@ AnnotationAnalysisPass::run(Function &F, FunctionAnalysisManager &AM)
 		}
 	}
 	return result;
-}
-
-extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
-llvmGetPassPluginInfo() {
-	return {
-		LLVM_PLUGIN_API_VERSION, "CGRAOmp", "v0.1",
-		[](PassBuilder &PB) {
-			PB.registerAnalysisRegistrationCallback(
-				[](ModuleAnalysisManager &MAM) {
-					MAM.registerPass([&] {
-						return ModuleAnnotationAnalysisPass();
-					});
-			});
-			PB.registerAnalysisRegistrationCallback(
-				[](FunctionAnalysisManager &FAM) {
-					FAM.registerPass([&] {
-						return AnnotationAnalysisPass();
-					});
-			});
-		}
-	};
 }

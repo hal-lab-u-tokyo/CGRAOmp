@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 10-12-2021 14:55:44
+*    Last Modified: 14-12-2021 15:47:24
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -60,6 +60,7 @@ using namespace llvm;
 #define INFO_DEBUG_PREFIX "\t[INFO]: "
 #define WARN_DEBUG_PREFIX "\t[WARN]: "
 #define ERR_DEBUG_PREFIX "\t[ERROR]: "
+#define DBG_DEBUG_PREFIX "\t[DEBUG]: "
 #define KERNEL_INFO_PREFIX ".omp_offloading.entry"
 #define ADD_FUNC_PASS(P) (createModuleToFunctionPassAdaptor(P))
 #define ADD_LOOP_PASS(P) (createModuleToFunctionPassAdaptor(createFunctionToLoopPassAdaptor(P)))
@@ -125,76 +126,87 @@ namespace CGRAOmp {
 			static AnalysisKey Key;
 	};
 
+	/**
+	* @class OmpScheduleInfo
+	* @brief Bundled values related to OpenMP statinc scheduling
+	*/
+	class OmpScheduleInfo {
+		using Info_t = SetVector<Value*>;
+		public:
+			OmpScheduleInfo(Value *schedule_type,
+							Value *last_iter_flag,
+							Value *lower_bound,
+							Value *upper_bound,
+							Value *stride,
+							Value *increment,
+							Value *chunk) {
+				info.insert(schedule_type);
+				info.insert(last_iter_flag);
+				info.insert(lower_bound);
+				info.insert(upper_bound);
+				info.insert(stride);
+				info.insert(increment);
+				info.insert(chunk);
+				valid = true;
+			};
+			OmpScheduleInfo() {
+				valid = false;
+				for (int i = 0; i < OMP_STATIC_INIT_OPERAND_N; i++) {
+					info.insert(nullptr);
+				}
+			};
+			bool invalidate(Function &F, const PreservedAnalyses &PA,
+						FunctionAnalysisManager::Invalidator &Inv);
+
+			explicit operator bool() const noexcept {
+				return valid;
+			}
+			Info_t::iterator begin() {
+				return info.begin();
+			}
+			Info_t::iterator end() {
+				return info.end();
+			}
+			bool contains(Value* V) {
+				return info.contains(V);
+			}
+
+			Value* get_schedule_type() {
+				return info[0];
+			}
+			Value* get_last_iter_flag() {
+				return info[1];
+			}
+			Value* get_lower_bound() {
+				return info[2];
+			}
+			Value* get_upper_bound() {
+				return info[3];
+			}
+			Value* get_stride() {
+				return info[4];
+			}
+			Value* get_increment() {
+				return info[5];
+			}
+			Value* get_chunk() {
+				return info[6];
+			}
+		private:
+			Info_t info;
+			bool valid;
+	};
+
+	/**
+	 * @class OmpStaticShecudleAnalysis
+	 * @brief A function pass to analyze OpenMP static scheduling
+	 **/
 	class OmpStaticShecudleAnalysis:
 			public AnalysisInfoMixin<OmpStaticShecudleAnalysis> {
 		public:
-			class ScheduleInfo {
-				using Info_t = SetVector<Value*>;
-				public:
-					ScheduleInfo(Value *schedule_type,
-								 Value *last_iter_flag,
-								 Value *lower_bound,
-								 Value *upper_bound,
-								 Value *stride,
-								 Value *increment,
-								 Value *chunk) {
-						info.insert(schedule_type);
-						info.insert(last_iter_flag);
-						info.insert(lower_bound);
-						info.insert(upper_bound);
-						info.insert(stride);
-						info.insert(increment);
-						info.insert(chunk);
-						valid = true;
-					};
-					ScheduleInfo() {
-						valid = false;
-						for (int i = 0; i < OMP_STATIC_INIT_OPERAND_N; i++) {
-							info.insert(nullptr);
-						}
-					};
-					explicit operator bool() const noexcept {
-						return valid;
-					}
-					Info_t::iterator begin() {
-						return info.begin();
-					}
-					Info_t::iterator end() {
-						return info.end();
-					}
-					bool contains(Value* V) {
-						return info.contains(V);
-					}
-
-					Value* get_schedule_type() {
-						return info[0];
-					}
-					Value* get_last_iter_flag() {
-						return info[1];
-					}
-					Value* get_lower_bound() {
-						return info[2];
-					}
-					Value* get_upper_bound() {
-						return info[3];
-					}
-					Value* get_stride() {
-						return info[4];
-					}
-					Value* get_increment() {
-						return info[5];
-					}
-					Value* get_chunk() {
-						return info[6];
-					}
-				private:
-					Info_t info;
-					bool valid;
-			};
-			// using Result = Expected<ScheduleInfo>;
-			using Result = ScheduleInfo;
-			Result run(Loop &L, LoopAnalysisManager &AM,
-						LoopStandardAnalysisResults &AR);
+			// using Result = Expected<OmpScheduleInfo>;
+			using Result = OmpScheduleInfo;
+			Result run(Function &F, FunctionAnalysisManager &AM);
 
 		private:
 			friend AnalysisInfoMixin<OmpStaticShecudleAnalysis>;
