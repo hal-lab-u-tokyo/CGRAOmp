@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 14-12-2021 18:55:54
+*    Last Modified: 15-12-2021 11:20:05
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -40,6 +40,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/ADT/iterator_range.h"
 
 
 #include "CGRAOmpPass.hpp"
@@ -139,13 +140,40 @@ namespace CGRAOmp {
 	 * @brief A derived class from VerifyResultBase bundling detailed results for each verification type
 	*/
 	class VerifyResult : public VerifyResultBase {
+		private:
+			SmallVector<Loop*> valid_kernels;
+
 		public:
+			using KernelList = SmallVector<Loop*>;
+			using kernel_iterator = KernelList::iterator;
+
 			VerifyResult() : VerifyResultBase() {}
 			void print(raw_ostream &OS) const override;
+
+			/**
+			 * @brief register a valid loop kernel for the target CGRA
+			 * @param L Loop
+			 */
+			void registerKernel(Loop *L) {
+				valid_kernels.push_back(L);
+			}
+
+			inline kernel_iterator kernel_begin() {
+				return valid_kernels.begin();
+			};
+
+			inline kernel_iterator kernel_end() {
+				return valid_kernels.end();
+			}
+			inline iterator_range<kernel_iterator> kernels() {
+				return make_range(kernel_begin(), kernel_end());
+			}
+
 
 		private:
 			friend VerifyPass;
 			DenseMap<int, VerifyResultBase*> each_result;
+
 			/**
 			 * @brief Set the verification result for a kind of rule
 			 * @param kind verified kind
@@ -217,8 +245,8 @@ namespace CGRAOmp {
 			static AnalysisKey Key;
 
 			template <typename AGVerifyPassT>
-			void AG_verification(Loop &L, LoopAnalysisManager &AM,
-								LoopStandardAnalysisResults &AR, Result &result);
+			AGCompatibility& AG_verification(Loop &L, LoopAnalysisManager &AM,
+								LoopStandardAnalysisResults &AR);
 	};
 
 	/**

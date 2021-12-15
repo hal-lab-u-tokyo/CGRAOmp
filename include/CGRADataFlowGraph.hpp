@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 13-09-2021 17:16:22
+*    Last Modified: 15-12-2021 18:48:31
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -35,9 +35,10 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/IR/Constant.h"
 
 #include "CGRAInstMap.hpp"
-
+#include "OptionPlugin.hpp"
 
 using namespace CGRAOmp;
 using namespace std;
@@ -60,8 +61,10 @@ namespace llvm {
 		public:
 			enum class NodeKind {
 				Compute,
-				MemAccess,
+				MemLoad,
+				MemStore,
 				Compare,
+				Constant,
 				VirtualRoot,
 			};
 
@@ -88,7 +91,9 @@ namespace llvm {
 
 			int getID() const { return ID; }
 
-			virtual string getUniqueName() = 0;
+			virtual string getUniqueName() const = 0;
+			virtual string getNodeAttr() const = 0;
+			virtual string getExtraInfo() const { return ""; };
 
 		protected:
 			int ID;
@@ -105,8 +110,11 @@ namespace llvm {
 			VirtualRootNode() :
 				DFGNode(VROOT_NODE_ID, 
 					DFGNode::NodeKind::VirtualRoot, nullptr) {}
-			string getUniqueName() {
+			string getUniqueName() const {
 				return "VROOT";
+			}
+			string getNodeAttr() const {
+				return "";
 			}
 	};
 
@@ -119,12 +127,80 @@ namespace llvm {
 			ComputeNode(int ID, InstMapEntry *map_entry) : 
 				DFGNode(ID, DFGNode::NodeKind::Compute, map_entry) {}
 
-			string getUniqueName() {
+			string getUniqueName() const {
 				return map_entry->getMapName() + "_" + to_string(getID());
+			}
+			string getNodeAttr() const {
+				return formatv("type=op,{0}={1}", OptDFGOpKey, map_entry->getMapName());
 			}
 		private:
 
 	};
+
+	template<DFGNode::NodeKind KIND>
+	class MemAccessNode : public DFGNode {
+		public:
+			MemAccessNode(int ID) : 
+					DFGNode(ID, KIND, nullptr) {
+				_isLoad = KIND == DFGNode::NodeKind::MemLoad;
+			}
+
+			inline bool isLoad() { return _isLoad;}
+
+			string getUniqueName() const {
+				switch (KIND) {
+					case DFGNode::NodeKind::MemLoad:
+						return  "Load_" + to_string(getID());
+					case DFGNode::NodeKind::MemStore:
+						return  "Store_" + to_string(getID());
+					default:
+						assert("Unexprected node kind for memory access node");
+						return "";
+				}
+			}
+			string getNodeAttr() const {
+				switch (KIND) {
+					case DFGNode::NodeKind::MemLoad:
+						return  "type=input";
+					case DFGNode::NodeKind::MemStore:
+						return  "type=output";
+					default:
+						assert("Unexprected node kind for memory access node");
+						return "";
+				}
+			}
+		private:
+			bool _isLoad;
+	};
+
+	class ConstantNode : public DFGNode {
+		public:
+			ConstantNode(int ID, Constant *c) : 
+				DFGNode(ID, DFGNode::NodeKind::Constant, nullptr),
+				const_value(c) {}
+			string getUniqueName() const {
+				return "Const_" + to_string(getID());
+			}
+			string getNodeAttr() const {
+				return formatv("type=const,{0}", getConstStr());
+			}
+			string getExtraInfo() const {
+				return getConstStr();
+			}
+		private:
+			Constant *const_value;
+			string getConstStr() const {
+				if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
+					return formatv("int{0}={1}", cint->getBitWidth(), cint->getSExtValue());
+				} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
+					assert("Not implemented for floating point constant");
+				} else {
+					errs() << "Unexpected const type\n";
+				}
+				return "";
+			}
+	};
+
 
 	/**
 	 * @class DFGEdge
@@ -132,7 +208,7 @@ namespace llvm {
 	*/
 	class DFGEdge : public DFGEdgeBase {
 		public:
-			DFGEdge(DFGNode &N) : DFGEdgeBase(N) {}
+			DFGEdge(DFGNode &N, int operand = 0) : DFGEdgeBase(N), operand(operand) {}
 			DFGEdge(const DFGEdge &E) : DFGEdgeBase(E) {
 				*this = E;
 			};
@@ -149,7 +225,12 @@ namespace llvm {
 				DFGEdgeBase::operator=(std::move(E));
 				return *this;
 			};
+
+			string getEdgeAttr() const {
+				return formatv("operand={0}", operand);
+			}
 		private:
+			int operand;
 	};
 
 	/**
@@ -383,23 +464,22 @@ namespace llvm {
 
 			static string getNodeLabel(const DFGNode *Node, 
 								const CGRADFG *G) {
-				return formatv("Label ID: {0} info: {1}", 
-								Node->getID(), "");
+				return Node->getUniqueName();
 			}
 
 			static string getNodeIdentifierLabel(const DFGNode *Node, 
 								const CGRADFG *G) {
-				return "";
+				return Node->getExtraInfo();
 			}
 
 			static string getNodeDescription(const DFGNode *Node, 
 								const CGRADFG *G) {
-				return formatv("desc. of ID {0}", Node->getID());
+				return "";
 			}
 
 			static string getNodeAttributes(const DFGNode *Node, 
 								const CGRADFG *G) {
-				return formatv("myattr=ID{0}", Node->getID());
+				return Node->getNodeAttr();
 			}
 
 			static string getEdgeAttributes(const DFGNode *Node, 

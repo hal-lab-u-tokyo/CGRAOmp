@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 13-09-2021 17:17:42
+*    Last Modified: 15-12-2021 18:30:06
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -120,7 +120,7 @@ string CGRADFGDotGraphTraits::getEdgeAttributes(const DFGNode *Node,
 					  const CGRADFG *G)
 {
 	const DFGEdge *E = static_cast<const DFGEdge*>(*I.getCurrent());
-	return "";
+	return E->getEdgeAttr();
 }
 
 string CGRADFGDotGraphTraits::getGraphProperties(const CGRADFG *G) {

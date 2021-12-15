@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 14-12-2021 18:56:12
+*    Last Modified: 15-12-2021 14:02:10
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -130,12 +130,12 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		return result;
 	}
 
-	std::function<void(Loop*)> ag_verify_adaptor;
+	std::function<AGCompatibility(Loop*)> ag_verify_adaptor;
 
 	switch (dec_model->getAG()->getKind()) {
 		case AddressGenerator::Kind::Affine:
 			ag_verify_adaptor = [&](Loop *L) {
-				AG_verification<VerifyAffineAGCompatiblePass>(*L, LPM, AR, result);
+				return AG_verification<VerifyAffineAGCompatiblePass>(*L, LPM, AR);
 			};
 			break;
 		case AddressGenerator::Kind::FullState:
@@ -144,21 +144,25 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 	}
 
 	// verify each memory access
+
 	for (auto L : loop_kernels) {
 		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
 					<< "Verifying Affine AG compatibility of a loop: "
 					<< L->getName() << "\n");
-		ag_verify_adaptor(L);
+		auto compat = ag_verify_adaptor(L);
+		if (compat) {
+			result.registerKernel(L);
+		}
 	}
 
 	return result;
 }
 
 template <typename AGVerifyPassT>
-void DecoupledVerifyPass::AG_verification(Loop &L, LoopAnalysisManager &AM,
-								LoopStandardAnalysisResults &AR, Result &result)
+AGCompatibility& DecoupledVerifyPass::AG_verification(Loop &L, LoopAnalysisManager &AM,
+								LoopStandardAnalysisResults &AR)
 {
-	AGCompatibility ag_compat = AM.getResult<AGVerifyPassT>(L, AR);
+	return AM.getResult<AGVerifyPassT>(L, AR);
 	//result.setResult(VerificationKind::MemoryAccess, &ag_compat);
 }
 
@@ -242,9 +246,9 @@ template<int N, typename T>
 bool VerifyAffineAGCompatiblePass::check_all(SmallVector<T*> &list,  ScalarEvolution &SE)
 {
 	// dump
-	for (auto access : list) {
-		access->dump();
-	}
+	// for (auto access : list) {
+	// 	access->dump();
+	// }
 
 	// // verify each address pattern
 	// for (auto access : list) {

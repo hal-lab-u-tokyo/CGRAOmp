@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 14-12-2021 18:40:53
+#   Last Modified: 15-12-2021 18:49:46
 ###
 
 from argparse import ArgumentParser
@@ -209,7 +209,8 @@ def passCGRAOmp(infile, outfile, libpath, config, options, verbose):
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAModel.so"]
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpPass.so"]
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpVerifyPass.so"]
-    cmd += ["-passes=cgraomp"]
+    cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpDFGPass.so"]
+    cmd += ["-passes=cgraomp", "--cgra-dfg-plain"]
 #    cmd += ["--debug-pass-manager"]
     cmd += ["-cm", config]
     cmd += [infile]

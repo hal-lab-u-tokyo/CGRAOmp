@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 14-09-2021 01:54:47
+*    Last Modified: 15-12-2021 18:45:13
 */
 
 #include "llvm/Support/CommandLine.h"
@@ -46,7 +46,7 @@ cl::alias CGRAOmp::PathToCGRAConfigAlias("cm",
 cl::opt<bool> CGRAOmp::OptVerbose("cgraomp-verbose", cl::init(false), 
 			cl::desc("Enables verbose output for CGRAOmp"));
 
-cl::opt<string> CGRAOmp::OptDFGOpKey("cgra-dfg-op-key", cl::init("op"),
+cl::opt<string> CGRAOmp::OptDFGOpKey("cgra-dfg-op-key", cl::init("opcode"),
 			cl::desc("opcode key for DOT generation"), cl::value_desc("key"));
 
 cl::opt<bool> CGRAOmp::OptDFGPlainNodeName("cgra-dfg-plain", cl::init(false), 

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 11:36:50
-*    Last Modified: 14-12-2021 15:16:45
+*    Last Modified: 15-12-2021 11:16:16
 */
 #ifndef DecoupledAnalysis_H
 #define DecoupledAnalysis_H
@@ -33,6 +33,7 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/ADT/iterator_range.h"
 
 using namespace llvm;
 
@@ -51,6 +52,9 @@ namespace CGRAOmp {
 			using MemLoadList = SmallVector<LoadInst*>;
 			using MemStoreList = SmallVector<StoreInst*>;
 
+			using load_iterator = MemLoadList::iterator;
+			using store_iterator = MemStoreList::iterator;
+
 			void setMemLoad(MemLoadList &&l) {
 				mem_load = l;
 			}
@@ -58,17 +62,23 @@ namespace CGRAOmp {
 			void setMemStore(MemStoreList &&l) {
 				mem_store = l;
 			}
-			MemLoadList::iterator load_begin() {
+			inline load_iterator load_begin() {
 				return mem_load.begin();
 			}
-			MemLoadList::iterator load_end() {
+			inline load_iterator load_end() {
 				return mem_load.end();
 			}
-			MemStoreList::iterator store_begin() {
+			inline iterator_range<load_iterator> loads() {
+				return make_range(load_begin(), load_end());
+			}
+			inline store_iterator store_begin() {
 				return mem_store.begin();
 			}
-			MemStoreList::iterator store_end() {
+			inline store_iterator store_end() {
 				return mem_store.end();
+			}
+			inline iterator_range<store_iterator> stores() {
+				return make_range(store_begin(), store_end());
 			}
 
 			MemLoadList& get_loads() {
