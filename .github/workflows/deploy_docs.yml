@@ -1,0 +1,68 @@
+#
+#    MIT License
+#    
+#    Copyright (c) 2022 Amano laboratory, Keio University & Processor Research Team, RIKEN Center for Computational Science
+#    
+#    Permission is hereby granted, free of charge, to any person obtaining a copy of
+#    this software and associated documentation files (the "Software"), to deal in
+#    the Software without restriction, including without limitation the rights to
+#    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+#    of the Software, and to permit persons to whom the Software is furnished to do
+#    so, subject to the following conditions:
+#    
+#    The above copyright notice and this permission notice shall be included in all
+#    copies or substantial portions of the Software.
+#    
+#    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+#    SOFTWARE.
+#    
+#    File:          /.github/workflows/deploy_docs.yml
+#    Project:       CGRAOmp
+#    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+#    Created Date:  18-01-2022 19:50:06
+#    Last Modified: 19-01-2022 00:52:44
+#
+name: Release
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache LLVM and Clang
+        id: cache-llvm
+        uses: actions/cache@v2
+        with:
+          path: ./llvm
+          key: llvm-12.0.1
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: "12.0.1"
+          cached: ${{ steps.cache-llvm.outputs.cache-hit }}
+
+      - name: build libraries
+        run: |
+          sudo apt-get install doxygen
+          mkdir build install
+          cd build
+          cmake .. -DCMAKE_INSTALL_PREFIX=../install -DCGRAOMP_ENABLE_DOXGEN=ON
+          make -j `nproc`
+          make install
+
+      - name: deploy release docs
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./install/share/docs/doxygen-html/html
