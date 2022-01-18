@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 15-12-2021 18:56:46
+*    Last Modified: 20-12-2021 18:25:40
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -135,6 +135,8 @@ bool DFGPass::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager 
 				auto NewNode = make_comp_node(imap);
 				G.addNode(*NewNode);
 				user_to_node[v] = NewNode;
+				inst->print(errs());
+				errs() << " " << inst->hasAllowReassoc() << " "<< "\n";
 			} else if (isMemAccess(*inst)) {
 				// Memory access node
 				auto NewNode = make_mem_node(*inst);

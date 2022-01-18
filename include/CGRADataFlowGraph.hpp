@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 15-12-2021 18:48:31
+*    Last Modified: 16-12-2021 19:42:45
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -36,6 +36,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/IR/Constant.h"
+#include "llvm/ADT/APFloat.h"
 
 #include "CGRAInstMap.hpp"
 #include "OptionPlugin.hpp"
@@ -193,11 +194,28 @@ namespace llvm {
 				if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
 					return formatv("int{0}={1}", cint->getBitWidth(), cint->getSExtValue());
 				} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
-					assert("Not implemented for floating point constant");
+					auto apf = cfloat->getValueAPF();
+					float f = apf.convertToFloat();
+					return formatv("{0}={1}", getFloatType(apf), f);
 				} else {
 					errs() << "Unexpected const type\n";
 				}
 				return "";
+			}
+
+			string getFloatType(APFloat f) const {
+				switch (APFloatBase::SemanticsToEnum(f.getSemantics())) {
+					case APFloat::Semantics::S_IEEEhalf:
+						return "float16";
+					case APFloat::Semantics::S_IEEEsingle:
+						return "float32";
+					case APFloat::Semantics::S_IEEEdouble:
+						return "float64";
+					case APFloat::Semantics::S_IEEEquad:
+						return "float128";
+					default:
+						return "unknown_float_type";
+				}
 			}
 	};
 

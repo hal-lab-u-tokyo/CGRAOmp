@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 15-12-2021 18:49:46
+#   Last Modified: 20-12-2021 18:54:07
 ###
 
 from argparse import ArgumentParser
@@ -61,8 +61,8 @@ O2_FLAGS += ["-targetlibinfo", "-tti", "-tbaa", "-scoped-noalias-aa", "-assumpti
 
 POLLY_CANONICALIZE_LIKE = ["-mem2reg", "-early-cse", "-instcombine", "-simplifycfg", "-tailcallelim", "-simplifycfg", "-reassociate", "-loop-rotate", "-licm", "-indvars"]
 
-PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine",   "-loop-unroll", "--unroll-allow-partial",
-"-simplifycfg", "-instcombine", "-polly-canonicalize"]]
+# -constmerge, -constprop, -die, -ipconstprop, 
+PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine", "-instsimplify", "--early-cse", "-dce", "-loop-unroll", "-reassociate", "-early-cse", "-gvn", "-constmerge", "-ffast-math", "--unroll-allow-partial", "-simplifycfg", "-instcombine", "-polly-canonicalize"]]
 
 #POLLY_CANONICALIZE_LIKE]
 # ["-simplifycfg", "-polly-canonicalize", "-instsimplify", "-instcombine", "--indvars"]]
@@ -154,7 +154,7 @@ def run(msg, cmd, verbose = False, childEnv = os.environ):
 def clangIn(sources, outfile, arch, extra_args, verbose):
     pass_args = [ _ for _ in extra_args ]
     cmd = ["clang", "-O0", "-S", "-emit-llvm", "-Xclang",
-            "-disable-O0-optnone", "-fopenmp"]
+            "-disable-O0-optnone", "-fopenmp", "-ffast-math"]
 
     # color output preference
     if "-fno-diagnostics-color" not in extra_args:
