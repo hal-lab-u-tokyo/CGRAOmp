@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 20-12-2021 18:54:07
+#   Last Modified: 31-01-2022 12:42:53
 ###
 
 from argparse import ArgumentParser
@@ -215,6 +215,7 @@ def passCGRAOmp(infile, outfile, libpath, config, options, verbose):
     cmd += ["-cm", config]
     cmd += [infile]
     cmd += ["-o", outfile]
+    cmd += ["-load-dfg-pass-plugin", f"{libpath}/libTestDFGPass.so", "--dfg-pass-pipeline=test"]
     cmd += options
     return run("Verify kernel, extract DFG, and insert runtime",\
                 cmd, verbose)

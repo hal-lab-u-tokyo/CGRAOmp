@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  26-08-2021 20:53:10
-#    Last Modified: 15-12-2021 11:31:32
+#    Last Modified: 30-01-2022 20:48:28
 #
 
 # set LLVM version
@@ -66,6 +66,7 @@ set (LLVM_PASSLIB_LIST
   CGRAOmpAnnotationPass
   CGRAModel
   CGRAOmpDFGPass
+  TestDFGPass
 )
 
 # add for each lib

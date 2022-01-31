@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 15-12-2021 11:42:38
+*    Last Modified: 30-01-2022 20:28:27
 */
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
@@ -257,7 +257,7 @@ llvmGetPassPluginInfo() {
 							// PM.addPass(ADD_FUNC_PASS(LCSSAPass()));
 							// Verify->DFGExraction->Runtime Insertion
 							PM.addPass(VerifyModulePass());
-							PM.addPass(DFGPass());
+							PM.addPass(DFGPassHandler());
 							return true;
 						}
 						return false;

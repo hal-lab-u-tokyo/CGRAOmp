@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 15-12-2021 18:45:13
+*    Last Modified: 30-01-2022 19:47:36
 */
 
 #include "llvm/Support/CommandLine.h"
@@ -56,14 +56,25 @@ cl::list<CGRAOmp::OptKeyValue> CGRAOmp::OptDFGGraphProp("cgra-dfg-graph-prop",
 			cl::desc("Set a common perefenrece of DOT for graph"),
 			cl::value_desc("attr1=value1,attr2=value2,..."),
 			cl::CommaSeparated);
+
 cl::list<CGRAOmp::OptKeyValue> CGRAOmp::OptDFGNodeProp("cgra-dfg-node-prop", 
 			cl::desc("Set a common perefenrece of DOT for node"),
 			cl::value_desc("attr1=value1,attr2=value2,..."),
 			cl::CommaSeparated);
+
 cl::list<CGRAOmp::OptKeyValue> CGRAOmp::OptDFGEdgeProp("cgra-dfg-edge-prop", 
 			cl::desc("Set a common perefenrece of DOT for edge"),
 			cl::value_desc("attr1=value1,attr2=value2,..."),
 			cl::CommaSeparated);
+
+cl::list<string> CGRAOmp::OptDFGPassPipeline("dfg-pass-pipeline", 
+			cl::value_desc("<DFG Pass name>"),
+			cl::desc("A textual description of the pass pipeline for DFG optimization"),
+			cl::CommaSeparated);
+
+cl::list<string> CGRAOmp::OptDFGPassPlugin("load-dfg-pass-plugin", 
+			cl::value_desc("<Path string>"),
+			cl::desc("Load DFG pass plugin"));
 
 /**
  * @details It parses a string based on a regular expression

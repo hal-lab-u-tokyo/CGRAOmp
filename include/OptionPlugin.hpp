@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:20:02
-*    Last Modified: 14-09-2021 01:55:22
+*    Last Modified: 30-01-2022 19:46:40
 */
 #ifndef OptionPlugin_H
 #define OptionPlugin_H
@@ -176,6 +176,13 @@ namespace CGRAOmp
 	extern cl::list<OptKeyValue> OptDFGNodeProp;
 	/// to set common preference for edge
 	extern cl::list<OptKeyValue> OptDFGEdgeProp;
+
+	/// to specify which DFG Pass is applied
+	extern cl::list<string> OptDFGPassPipeline;
+
+	/// path list to load user DFG pass libraries
+	extern cl::list<string> OptDFGPassPlugin;
+
 }
 
 namespace llvm {

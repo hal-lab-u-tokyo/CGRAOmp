@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 20-12-2021 18:25:40
+*    Last Modified: 31-01-2022 13:43:59
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -34,13 +34,19 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/DynamicLibrary.h"
 
 #include "DFGPass.hpp"
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
 #include "CGRADataFlowGraph.hpp"
+#include "OptionPlugin.hpp"
 
 #include <queue>
+#include <system_error>
+
 
 using namespace llvm;
 using namespace CGRAOmp;
@@ -49,7 +55,70 @@ using namespace CGRAOmp;
 
 static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
-PreservedAnalyses DFGPass::run(Module &M, ModuleAnalysisManager &AM)
+
+DFGPassBuilder::DFGPassBuilder()
+{
+	Error E = search_callback();
+	if (E) {
+		ExitOnError Exit("Exit");
+		Exit(std::move(E));
+	}
+}
+
+void DFGPassBuilder::registerPipelineParsingCallback(
+		std::function<bool(StringRef Name, DFGPassManager &PM)> C) {
+	callback_list.push_back(C);
+}
+
+Error DFGPassBuilder::search_callback()
+{
+	error_code EC;
+	std::string ErrMsg;
+	for (auto lib_path : OptDFGPassPlugin) {
+		// load lib
+		if (sys::DynamicLibrary::LoadLibraryPermanently(lib_path.c_str(), &ErrMsg)) {
+			return make_error<StringError>(ErrMsg, EC);
+		}
+		// search for callback
+		void *callback = nullptr;
+		if (!(callback = sys::DynamicLibrary::SearchForAddressOfSymbol("getDFGPassPluginInfo"))) {
+			return make_error<StringError>("not found", EC);
+		}
+		auto info = reinterpret_cast<DFGPassPluginLibraryInfo(*)()>(callback)();
+		info.RegisterPassBuilderCallbacks(*this);
+	}
+
+	return ErrorSuccess();
+}
+
+Error DFGPassBuilder::parsePassPipeline(DFGPassManager &DPM, ArrayRef<std::string> PipelineTexts)
+{
+	error_code EC;
+	for (auto pass_name : PipelineTexts) {
+		auto found = false;
+		for (auto callback : callback_list) {
+			if (callback(pass_name, DPM)) {
+				found = true;
+			}
+		}
+		if (!found) {
+			return make_error<StringError>(formatv("{0} not found", pass_name), EC);
+		}
+	}
+	return ErrorSuccess();
+}
+
+void DFGPassManager::run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
+									LoopAnalysisManager &LAM,
+									LoopStandardAnalysisResults &AR)
+{
+	errs() << "reg " << pipeline.size() << "\n";
+	for (auto pass : pipeline) {
+		pass->run(G, L, FAM, LAM, AR);
+	}
+}
+
+PreservedAnalyses DFGPassHandler::run(Module &M, ModuleAnalysisManager &AM)
 {
 	auto &MM = AM.getResult<ModelManagerPass>(M);
 	auto model = MM.getModel();
@@ -77,7 +146,7 @@ PreservedAnalyses DFGPass::run(Module &M, ModuleAnalysisManager &AM)
 
 
 template<typename VerifyPassT>
-bool DFGPass::createDataFlowGraphsForAllKernels(Function &F, FunctionAnalysisManager &AM)
+bool DFGPassHandler::createDataFlowGraphsForAllKernels(Function &F, FunctionAnalysisManager &AM)
 {
 	VerifyResult& verify_result = AM.getResult<VerifyPassT>(F);
 	auto AR = getLSAR(F, AM);
@@ -89,7 +158,7 @@ bool DFGPass::createDataFlowGraphsForAllKernels(Function &F, FunctionAnalysisMan
 	return false;
 }
 
-bool DFGPass::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager &FAM,
+bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR)
 {
@@ -185,6 +254,20 @@ bool DFGPass::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager 
 			}
 		}
 	}
+
+	// // apply tree height reduction if needed
+	// if (!OptDisableTreeHeightReduction) {
+	// 	G = reduce_tree_height(G);
+	// }
+
+	auto DPB = DFGPassBuilder();
+	auto DPM = DFGPassManager();
+	Error E1 = DPB.parsePassPipeline(DPM, OptDFGPassPipeline);
+	if (E1) {
+		ExitOnError Exit(ERR_MSG_PREFIX);
+		Exit(std::move(E1));
+	}
+	DPM.run(G, L, FAM, LAM, AR);
 
 	Error E = G.saveAsDotGraph(L.getName().str() + ".dot");
 	if (E) {
