@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  18-01-2022 19:50:06
-#    Last Modified: 19-01-2022 00:52:02
+#    Last Modified: 01-02-2022 20:05:13
 #
 name: Build
 
@@ -60,7 +60,7 @@ jobs:
           sudo apt-get install doxygen
           mkdir build install
           cd build
-          cmake .. -DCMAKE_INSTALL_PREFIX=../install -DCGRAOMP_ENABLE_DOXGEN=ON
+          cmake .. -DCMAKE_INSTALL_PREFIX=../install -DCGRAOMP_ENABLE_DOXYGEN=ON
           make -j `nproc`
           make install
 
