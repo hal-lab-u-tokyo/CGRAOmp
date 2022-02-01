@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 14-12-2021 18:27:41
+*    Last Modified: 31-01-2022 13:45:48
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -56,11 +56,6 @@
 
 using namespace llvm;
 
-#define ERR_MSG_PREFIX "CGRAOmpPass \x1B[31m\033[1mError\033[0m: "
-#define INFO_DEBUG_PREFIX "\t[INFO]: "
-#define WARN_DEBUG_PREFIX "\t[WARN]: "
-#define ERR_DEBUG_PREFIX "\t[ERROR]: "
-#define DBG_DEBUG_PREFIX "\t[DEBUG]: "
 #define KERNEL_INFO_PREFIX ".omp_offloading.entry"
 #define ADD_FUNC_PASS(P) (createModuleToFunctionPassAdaptor(P))
 #define ADD_LOOP_PASS(P) (createModuleToFunctionPassAdaptor(createFunctionToLoopPassAdaptor(P)))

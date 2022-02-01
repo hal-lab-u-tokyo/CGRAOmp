@@ -25,8 +25,9 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 30-01-2022 20:28:27
+*    Last Modified: 01-02-2022 11:06:23
 */
+#include "common.hpp"
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
 #include "CGRAModel.hpp"
@@ -35,6 +36,7 @@
 #include "DFGPass.hpp"
 
 #include "llvm/Passes/PassBuilder.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Scalar/LoopRotation.h"
 #include "llvm/Transforms/Utils/LCSSA.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -43,6 +45,7 @@
 #include "llvm/ADT/Statistic.h"
 
 #include <system_error>
+#include <type_traits>
 
 
 using namespace llvm;
@@ -219,7 +222,7 @@ OmpStaticShecudleAnalysis::run(Function &F, FunctionAnalysisManager &AM)
 
 static void registerModuleAnalyses(ModuleAnalysisManager &MAM)
 {
-#define MODULE_ANALYSIS(CREATE_PASS) \
+#define MODULE_ANALYSIS(NAME, CREATE_PASS) \
 	MAM.registerPass([&] { return CREATE_PASS; });
 
 #include "OmpPasses.def"
@@ -228,7 +231,7 @@ static void registerModuleAnalyses(ModuleAnalysisManager &MAM)
 
 static void registerFunctionAnalyses(FunctionAnalysisManager &FAM)
 {
-#define FUNCTION_ANALYSIS(CREATE_PASS) \
+#define FUNCTION_ANALYSIS(NAME, CREATE_PASS) \
 	FAM.registerPass([&] { return CREATE_PASS; });
 
 #include "OmpPasses.def"
@@ -237,12 +240,13 @@ static void registerFunctionAnalyses(FunctionAnalysisManager &FAM)
 
 static void registerLoopAnalyses(LoopAnalysisManager &LAM)
 {
-#define LOOP_ANALYSIS(CREATE_PASS) \
+#define LOOP_ANALYSIS(NAME, CREATE_PASS) \
 	LAM.registerPass([&] { return CREATE_PASS; });
 
 #include "OmpPasses.def"
 
 }
+
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
 llvmGetPassPluginInfo() {
 	return {
@@ -260,6 +264,15 @@ llvmGetPassPluginInfo() {
 							PM.addPass(DFGPassHandler());
 							return true;
 						}
+						// Expand analysis passes
+						#define MODULE_ANALYSIS(NAME, CREATE_PASS) \
+						if (Name == "require<" NAME ">") { \
+							PM.addPass( \
+								RequireAnalysisPass<std::remove_reference<decltype(CREATE_PASS)>::type, Module>()); \
+							return true; \
+						}
+
+						#include "OmpPasses.def"
 						return false;
 				}
 			);

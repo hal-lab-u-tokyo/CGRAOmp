@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:35:11
-*    Last Modified: 15-09-2021 12:29:53
+*    Last Modified: 31-01-2022 13:49:37
 */
 
 #ifndef CGRAInstMap_H
@@ -41,6 +41,7 @@
 #include "llvm/Support/JSON.h"
 #include "llvm/IR/PassManager.h"
 
+#include "common.hpp"
 #include "CGRAOmpAnnotationPass.hpp"
 
 

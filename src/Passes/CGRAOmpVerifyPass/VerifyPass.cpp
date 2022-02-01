@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 15-12-2021 14:02:10
+*    Last Modified: 31-01-2022 13:50:42
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -43,6 +43,7 @@
 #include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
 
+#include "common.hpp"
 #include "VerifyPass.hpp"
 #include "CGRAOmpAnnotationPass.hpp"
 #include "DecoupledAnalysis.hpp"

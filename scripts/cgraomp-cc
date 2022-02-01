@@ -24,16 +24,17 @@
 #   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #   SOFTWARE.
 #   
-#   File:          /scripts/clang-cgraomp
+#   File:          /scripts/cgraomp-cc
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 31-01-2022 12:42:53
+#   Last Modified: 01-02-2022 10:52:20
 ###
 
 from argparse import ArgumentParser
 import os
 import sys
+from pathlib import Path
 import subprocess
 from pathlib import Path
 from shutil import get_terminal_size
@@ -52,6 +53,7 @@ GREEN_STR = "\x1b[32m{0}\x1b[39m"
 BOLD_STR = "\x1b[1m{0}\x1b[0m"
 
 WARNING_STR = MAGENTA_STR.format(BOLD_STR.format("Warning"))
+ERROR_STR = RED_STR.format(BOLD_STR.format("Error"))
 
 OPT_FLAGS = {"-O0", "-O1", "-O2", "-O3", "-Os", "-Oz"}
 O2_FLAGS = ["-tti", "-tbaa", "-scoped-noalias-aa", "-assumption-cache-tracker", "-targetlibinfo", "-verify", "-ee-instrument", "-simplifycfg", "-domtree", "-sroa", "-early-cse", "-lower-expect"]
@@ -109,15 +111,57 @@ def parser():
             metavar="<str>", help="specify the target cpu architecture" + \
             "(default: x86)")
     argparser.add_argument("-Xc", dest="clang_args", action="append", \
-            metavar="<arg>", help="Pass args on to the back-end clang")
+            metavar="<arg>", help="Pass <arg> to the back-end clang")
     argparser.add_argument("-save-temps", action="store_true", \
             help="save intermediate compilation files")
+    # for DFGs
+    argparser.add_argument("--load-dfg-pass-plugin", type=str, nargs="*", \
+                            help="list of paths of DFG Pass plugins")
+    argparser.add_argument("--dfg-pass-pipeline", type=str,
+                            help="A textual description of the pass pipeline for DFG optimization")
+    # for other options
+    argparser.add_argument("-Xcgraomp", dest="cgraomp_args", \
+                            action="append", metavar="<arg>", \
+                            help="Pass <arg> to CGRA OpenMP")
+
     # default setting
-    argparser.set_defaults(opt="-O2", clang_args=[])
+    argparser.set_defaults(opt="-O2", clang_args=[], cgraomp_args=[])
 
     args = argparser.parse_args()
 
     return args
+
+def parseCGRAOmpArgs(args):
+    options = []
+    if args.enable_cgraomp_debug:
+        options.append("-debug-only=cgraomp" + (",cgraomp-verbose" if args.verbose else ""))
+
+    # look up the specified libs
+    if not args.load_dfg_pass_plugin is None:
+        search_path = [Path(".")]
+        search_path.extend([Path(p) for p in os.environ.get("LD_LIBRARY_PATH").strip(":").split(":")])
+        search_path.append(Path(default_libdir))
+        path_to_lib = None
+        for plugin in args.load_dfg_pass_plugin:
+            for p in search_path:
+                glob_result = list(p.glob(plugin))
+                if len(glob_result) > 0:
+                    # found
+                    path_to_lib = glob_result[0]
+                    break
+            else:
+                p = Path(plugin)
+                if p.is_absolute() and p.exists():
+                    path_to_lib = p
+                else:
+                    print(ERROR_STR, plugin, "is not found")
+                    sys.exit(1)
+        options.append(f"--load-dfg-pass-plugin={path_to_lib}")
+    if args.dfg_pass_pipeline:
+        options.append("-dfg-pass-pipeline=" + args.dfg_pass_pipeline)
+
+    options.extend(args.cgraomp_args)
+    return options
 
 def run(msg, cmd, verbose = False, childEnv = os.environ):
     # print(reduce(lambda x, y: x + " " + y, cmd))
@@ -210,12 +254,12 @@ def passCGRAOmp(infile, outfile, libpath, config, options, verbose):
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpPass.so"]
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpVerifyPass.so"]
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpDFGPass.so"]
-    cmd += ["-passes=cgraomp", "--cgra-dfg-plain"]
+    cmd += ["-passes=module(cgraomp)", "--cgra-dfg-plain"]
 #    cmd += ["--debug-pass-manager"]
     cmd += ["-cm", config]
     cmd += [infile]
     cmd += ["-o", outfile]
-    cmd += ["-load-dfg-pass-plugin", f"{libpath}/libTestDFGPass.so", "--dfg-pass-pipeline=test"]
+    # cmd += ["-load-dfg-pass-plugin", f"{libpath}/libTestDFGPass.so", "--dfg-pass-pipeline=test,test"]
     cmd += options
     return run("Verify kernel, extract DFG, and insert runtime",\
                 cmd, verbose)
@@ -277,11 +321,7 @@ def main():
     libpath = default_libdir if args.cgraomp_lib_path is None else \
                     args.cgraomp_lib_path
 
-    if args.enable_cgraomp_debug:
-        options = ["-debug-only=cgraomp" + (",cgraomp-verbose" if args.verbose else "")]
-    else:
-        options = []
-
+    options = parseCGRAOmpArgs(args)
     if passCGRAOmp(cgra_unbundle_name, cgra_post_name, libpath, \
                         args.cgra_config, options, args.verbose):
         add_imm(cgra_post_name)

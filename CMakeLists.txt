@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  26-08-2021 20:50:56
-#    Last Modified: 17-09-2021 15:33:25
+#    Last Modified: 31-01-2022 17:25:32
 #
 
 # See docs/CMake.html for instructions about how to build LLVM with CMake.
@@ -47,7 +47,7 @@ if(POLICY CMP0077)
   cmake_policy(SET CMP0077 NEW)
 endif()
 
-set (CGRAOMP_ENABLE_DOXGEN OFF CACHE BOOL "Use doxygen to generate llvm API documentation.")
+set (CGRAOMP_ENABLE_DOXYGEN OFF CACHE BOOL "Use doxygen to generate llvm API documentation.")
 set(CGRAOMP_INSTALL_DOXYGEN_HTML_DIR "share/docs/doxygen-html"
     CACHE STRING "Doxygen-generated HTML documentation install directory")
 
@@ -57,6 +57,6 @@ add_subdirectory(src)
 file(COPY share DESTINATION ${CMAKE_BINARY_DIR})
 
 install(DIRECTORY share/ DESTINATION share)
-install(FILES scripts/clang-cgraomp
+install(FILES scripts/cgraomp-cc
         PERMISSIONS OWNER_READ OWNER_EXECUTE GROUP_READ WORLD_READ
         DESTINATION bin/)

@@ -25,24 +25,24 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 18:47:03
-*    Last Modified: 14-12-2021 18:52:01
+*    Last Modified: 01-02-2022 10:16:26
 */
 #ifndef MODULE_ANALYSIS
-#define MODULE_ANALYSIS(CREATE_PASS)
+#define MODULE_ANALYSIS(NAME, CREATE_PASS)
 #endif
-MODULE_ANALYSIS(ModelManagerPass())
-MODULE_ANALYSIS(OmpKernelAnalysisPass())
+MODULE_ANALYSIS("cgra-model", ModelManagerPass())
+MODULE_ANALYSIS("cgra-omp-kernel", OmpKernelAnalysisPass())
 #undef MODULE_ANALYSIS
 
 #ifndef FUNCTION_ANALYSIS
-#define FUNCTION_ANALYSIS(CREATE_PASS)
+#define FUNCTION_ANALYSIS(NAME, CREATE_PASS)
 #endif
-FUNCTION_ANALYSIS(OmpStaticShecudleAnalysis())
-FUNCTION_ANALYSIS(ModelManagerFunctionProxy())
+FUNCTION_ANALYSIS("omp-stat-schedule", OmpStaticShecudleAnalysis())
+FUNCTION_ANALYSIS("fmm-proxy", ModelManagerFunctionProxy())
 #undef FUNCTION_ANALYSIS
 
 #ifndef LOOP_ANALYSIS
-#define LOOP_ANALYSIS(CREATE_PASS)
+#define LOOP_ANALYSIS(NAME, CREATE_PASS)
 #endif
-LOOP_ANALYSIS(ModelManagerLoopProxy())
+LOOP_ANALYSIS("lmm-proxy", ModelManagerLoopProxy())
 #undef LOOP_ANALYSIS

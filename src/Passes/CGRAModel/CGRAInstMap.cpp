@@ -25,16 +25,17 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 15-09-2021 12:48:18
+*    Last Modified: 31-01-2022 13:49:06
 */
 
-#include "CGRAInstMap.hpp"
 
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 
+#include "common.hpp"
+#include "CGRAInstMap.hpp"
 #include "OptionPlugin.hpp"
 #include "CGRAModel.hpp"
 

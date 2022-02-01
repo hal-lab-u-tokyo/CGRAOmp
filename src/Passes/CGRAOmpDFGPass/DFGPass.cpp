@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 31-01-2022 13:43:59
+*    Last Modified: 01-02-2022 11:05:09
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -38,6 +38,7 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/DynamicLibrary.h"
 
+#include "common.hpp"
 #include "DFGPass.hpp"
 #include "CGRAOmpPass.hpp"
 #include "VerifyPass.hpp"
@@ -58,18 +59,39 @@ static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
 DFGPassBuilder::DFGPassBuilder()
 {
+	// search for plugins
 	Error E = search_callback();
 	if (E) {
-		ExitOnError Exit("Exit");
+		ExitOnError Exit(ERR_MSG_PREFIX);
 		Exit(std::move(E));
 	}
 }
 
-void DFGPassBuilder::registerPipelineParsingCallback(
-		std::function<bool(StringRef Name, DFGPassManager &PM)> C) {
+void DFGPassBuilder::registerPipelineParsingCallback(const CallBackT &C) {
 	callback_list.push_back(C);
 }
 
+/**
+ * @details 
+ * An exmaple of the call back function:
+ * @code {.c}
+extern "C" ::CGRAOmp::DFGPassPluginLibraryInfo getDFGPassPluginInfo() {
+	return { "Plugin name", 
+		[](DFGPassBuilder &PB) {
+			PB.registerPipelineParsingCallback(
+				[](StringRef Name, DFGPassManager &PM) {
+					if (Name == "my-dfg-pass") {
+						PM.addPass(MyDFGPass());
+						return true;
+					}
+					return false;
+				}
+			);
+		}
+	};
+}
+ * @endcode
+*/
 Error DFGPassBuilder::search_callback()
 {
 	error_code EC;
@@ -82,10 +104,13 @@ Error DFGPassBuilder::search_callback()
 		// search for callback
 		void *callback = nullptr;
 		if (!(callback = sys::DynamicLibrary::SearchForAddressOfSymbol("getDFGPassPluginInfo"))) {
-			return make_error<StringError>("not found", EC);
+			return make_error<StringError>(formatv("getDFGPassPluginInfo function is not impelemnted in {0}", lib_path), EC);
 		}
+		// register the callback func for parsing pipeline
 		auto info = reinterpret_cast<DFGPassPluginLibraryInfo(*)()>(callback)();
 		info.RegisterPassBuilderCallbacks(*this);
+		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "A plugin of DFG Pass \"" <<
+					info.PluginName << "\" is loaded\n");
 	}
 
 	return ErrorSuccess();
@@ -112,9 +137,19 @@ void DFGPassManager::run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR)
 {
-	errs() << "reg " << pipeline.size() << "\n";
+	// iterate for all the passes
 	for (auto pass : pipeline) {
+		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "applying " << pass->name() << "\n");
 		pass->run(G, L, FAM, LAM, AR);
+	}
+}
+
+DFGPassHandler::DFGPassHandler() : DPB(new DFGPassBuilder()), DPM(new DFGPassManager())
+{
+	Error E = DPB->parsePassPipeline(*DPM, OptDFGPassPipeline);
+	if (E) {
+		ExitOnError Exit(ERR_MSG_PREFIX);
+		Exit(std::move(E));
 	}
 }
 
@@ -260,14 +295,7 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	// 	G = reduce_tree_height(G);
 	// }
 
-	auto DPB = DFGPassBuilder();
-	auto DPM = DFGPassManager();
-	Error E1 = DPB.parsePassPipeline(DPM, OptDFGPassPipeline);
-	if (E1) {
-		ExitOnError Exit(ERR_MSG_PREFIX);
-		Exit(std::move(E1));
-	}
-	DPM.run(G, L, FAM, LAM, AR);
+	DPM->run(G, L, FAM, LAM, AR);
 
 	Error E = G.saveAsDotGraph(L.getName().str() + ".dot");
 	if (E) {

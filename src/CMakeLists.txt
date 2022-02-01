@@ -25,9 +25,9 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  04-09-2021 17:17:57
-#    Last Modified: 06-09-2021 19:06:44
+#    Last Modified: 31-01-2022 15:50:00
 #
-if (CGRAOMP_ENABLE_DOXGEN)
+if (CGRAOMP_ENABLE_DOXYGEN)
   find_package(Doxygen)
   IF(DOXYGEN_FOUND)
     message("-- Enables building doxygen")
