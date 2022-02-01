@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 09:59:52
-*    Last Modified: 01-02-2022 11:01:25
+*    Last Modified: 01-02-2022 15:16:37
 */
 #ifndef DFGPASS_H
 #define DFGPASS_H
@@ -242,9 +242,9 @@ namespace CGRAOmp {
 			 */
 			inline DFGNode* make_mem_node(Instruction &I) {
 				if (isa<LoadInst>(I)) {
-					return new MemAccessNode<DFGNode::NodeKind::MemLoad>(node_count++);
+					return new MemAccessNode<DFGNode::NodeKind::MemLoad>(node_count++, &I);
 				} else {
-					return new MemAccessNode<DFGNode::NodeKind::MemStore>(node_count++);
+					return new MemAccessNode<DFGNode::NodeKind::MemStore>(node_count++, &I);
 				}
 			}
 			/**
@@ -253,8 +253,8 @@ namespace CGRAOmp {
 			 * @param I Instruction for the computational
 			 * @return DFGNode* a pointer to the node
 			 */
-			inline DFGNode* make_comp_node(InstMapEntry *imap) {
-				return new ComputeNode(node_count++, imap);
+			inline DFGNode* make_comp_node(Instruction *inst, std::string opcode) {
+				return new ComputeNode(node_count++, inst, opcode);
 			}
 
 			/**

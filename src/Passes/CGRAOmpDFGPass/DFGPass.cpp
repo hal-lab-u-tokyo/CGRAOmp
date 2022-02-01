@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 01-02-2022 11:05:09
+*    Last Modified: 01-02-2022 12:37:26
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -44,6 +44,8 @@
 #include "VerifyPass.hpp"
 #include "CGRADataFlowGraph.hpp"
 #include "OptionPlugin.hpp"
+
+#include "BalanceTree.hpp"
 
 #include <queue>
 #include <system_error>
@@ -236,7 +238,7 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		if (auto *inst = dyn_cast<Instruction>(v)) {
 			if (auto *imap = model->isSupported(inst)) {
 				// Computational node
-				auto NewNode = make_comp_node(imap);
+				auto NewNode = make_comp_node(inst, imap->getMapName());
 				G.addNode(*NewNode);
 				user_to_node[v] = NewNode;
 				inst->print(errs());
@@ -294,7 +296,7 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	// if (!OptDisableTreeHeightReduction) {
 	// 	G = reduce_tree_height(G);
 	// }
-
+	DPM->addPass(BalanceTree());
 	DPM->run(G, L, FAM, LAM, AR);
 
 	Error E = G.saveAsDotGraph(L.getName().str() + ".dot");

@@ -25,11 +25,12 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  15-12-2021 11:31:55
-#    Last Modified: 15-12-2021 11:31:55
+#    Last Modified: 01-02-2022 12:28:14
 #
 add_llvm_library( libCGRAOmpDFGPass MODULE
   ## append source file list here
   DFGPass.cpp
+  BalanceTree.cpp
 
   DEPENDS
   intrinsics_gen

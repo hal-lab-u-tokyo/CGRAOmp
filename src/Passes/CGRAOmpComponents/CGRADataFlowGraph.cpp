@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 15-12-2021 18:30:06
+*    Last Modified: 01-02-2022 15:27:20
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -35,12 +35,34 @@
 
 #include "CGRADataFlowGraph.hpp"
 #include "OptionPlugin.hpp"
+#include "common.hpp"
 
 #include <system_error>
 #include <regex>
+#include <string>
 
 using namespace llvm;
 using namespace std;
+
+#define DEBUG_TYPE "cgraomp"
+
+string ConstantNode::getConstStr() const
+ {
+	Constant* const_value = dyn_cast<Constant>(val);
+	if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
+		return formatv("int{0}={1}", cint->getBitWidth(), cint->getSExtValue());
+	} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
+		auto apf = cfloat->getValueAPF();
+		float f = apf.convertToFloat();
+		return formatv("{0}={1}", getFloatType(apf), f);
+	} else {
+		LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << " Unexpected constant type: ";
+					const_value->print(dbgs());
+					dbgs() << "\n"
+		);
+	}
+	return "";
+}
 
 /* ================== Implementation of CGRADFG ================== */
 bool CGRADFG::addNode(NodeType &N)

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 16-12-2021 19:42:45
+*    Last Modified: 01-02-2022 16:28:08
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -36,10 +36,14 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/IR/Constant.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/ADT/APFloat.h"
 
 #include "CGRAInstMap.hpp"
 #include "OptionPlugin.hpp"
+
+#include <string>
+#include <utility>
 
 using namespace CGRAOmp;
 using namespace std;
@@ -69,9 +73,8 @@ namespace llvm {
 				VirtualRoot,
 			};
 
-			DFGNode(int ID, NodeKind kind, InstMapEntry *map_entry) :
-				DFGNodeBase(), ID(ID), kind(kind),
-				map_entry(map_entry) {};
+			DFGNode(int ID, NodeKind kind, Value *val) :
+				DFGNodeBase(), ID(ID), kind(kind), val(val) {};
 
 			DFGNode(const DFGNode &N) {
 				*this = N;
@@ -90,16 +93,21 @@ namespace llvm {
 				return *this;
 			}
 
+			NodeKind getKind() const {
+				return kind;
+			}
+
 			int getID() const { return ID; }
+			Value* getValue() const { return val; }
 
 			virtual string getUniqueName() const = 0;
 			virtual string getNodeAttr() const = 0;
 			virtual string getExtraInfo() const { return ""; };
 
 		protected:
-			int ID;
 			NodeKind kind;
-			InstMapEntry *map_entry;
+			int ID;
+			Value *val;
 	};
 
 	/**
@@ -112,7 +120,7 @@ namespace llvm {
 				DFGNode(VROOT_NODE_ID, 
 					DFGNode::NodeKind::VirtualRoot, nullptr) {}
 			string getUniqueName() const {
-				return "VROOT";
+				return "__VROOT";
 			}
 			string getNodeAttr() const {
 				return "";
@@ -125,24 +133,30 @@ namespace llvm {
 	*/
 	class ComputeNode : public DFGNode {
 		public:
-			ComputeNode(int ID, InstMapEntry *map_entry) : 
-				DFGNode(ID, DFGNode::NodeKind::Compute, map_entry) {}
+			ComputeNode(int ID, Instruction* inst, std::string opcode) : 
+				DFGNode(ID, DFGNode::NodeKind::Compute, inst), opcode(opcode) {}
 
 			string getUniqueName() const {
-				return map_entry->getMapName() + "_" + to_string(getID());
+				return opcode + "_" + to_string(getID());
 			}
 			string getNodeAttr() const {
-				return formatv("type=op,{0}={1}", OptDFGOpKey, map_entry->getMapName());
+				return formatv("type=op,{0}={1}", OptDFGOpKey, opcode);
+			}
+			static bool classof(const DFGNode* N) {
+				return N->getKind() == NodeKind::Compute;
+			}
+			Instruction* getInst() const {
+				return dyn_cast<Instruction>(val);
 			}
 		private:
-
+			std::string opcode;
 	};
 
 	template<DFGNode::NodeKind KIND>
 	class MemAccessNode : public DFGNode {
 		public:
-			MemAccessNode(int ID) : 
-					DFGNode(ID, KIND, nullptr) {
+			MemAccessNode(int ID, Instruction *inst) : 
+					DFGNode(ID, KIND, inst) {
 				_isLoad = KIND == DFGNode::NodeKind::MemLoad;
 			}
 
@@ -170,6 +184,10 @@ namespace llvm {
 						return "";
 				}
 			}
+			static bool classof(const DFGNode* N) {
+				return N->getKind() == NodeKind::MemLoad ||
+						N->getKind() == NodeKind::MemStore;
+			}
 		private:
 			bool _isLoad;
 	};
@@ -177,8 +195,7 @@ namespace llvm {
 	class ConstantNode : public DFGNode {
 		public:
 			ConstantNode(int ID, Constant *c) : 
-				DFGNode(ID, DFGNode::NodeKind::Constant, nullptr),
-				const_value(c) {}
+				DFGNode(ID, DFGNode::NodeKind::Constant, c) {}
 			string getUniqueName() const {
 				return "Const_" + to_string(getID());
 			}
@@ -188,20 +205,12 @@ namespace llvm {
 			string getExtraInfo() const {
 				return getConstStr();
 			}
+			static bool classof(const DFGNode *N) {
+				return N->getKind() == NodeKind::Constant;
+			}
 		private:
 			Constant *const_value;
-			string getConstStr() const {
-				if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
-					return formatv("int{0}={1}", cint->getBitWidth(), cint->getSExtValue());
-				} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
-					auto apf = cfloat->getValueAPF();
-					float f = apf.convertToFloat();
-					return formatv("{0}={1}", getFloatType(apf), f);
-				} else {
-					errs() << "Unexpected const type\n";
-				}
-				return "";
-			}
+			string getConstStr() const;
 
 			string getFloatType(APFloat f) const {
 				switch (APFloatBase::SemanticsToEnum(f.getSemantics())) {
@@ -214,7 +223,7 @@ namespace llvm {
 					case APFloat::Semantics::S_IEEEquad:
 						return "float128";
 					default:
-						return "unknown_float_type";
+						return "unknown";
 				}
 			}
 	};
@@ -253,12 +262,15 @@ namespace llvm {
 
 	/**
 	 * @class CGRADFG
-	 * @brief A graph class for CGRA kernel DFG derived from DirectedGraph
+	 * @brief A graph class for CGRA kernel DFG derived from @em llvm::DirectedGraph
+	 * @see https://llvm.org/doxygen/classllvm_1_1DirectedGraph.html
+	 * @details To handle this graph class by LLVM utilities (such as traversal), it needs an entry node. However, data-flow-graphs have more than one nodes which has no in-coming edge. Therefore, this class has a virtual root node, which is connected to those node and does not correspond to any LLVM IR values. When exporting this graph instance as DOT file, the virtual root and its edges are eliminated.
 	 */
 	class CGRADFG : public CGRADFGBase {
 		public:
 			using NodeType = DFGNode;
 			using EdgeType = DFGEdge;
+			using EdgeInfoType = std::pair<NodeType*, EdgeListTy>;
 
 			/// default constructor
 			CGRADFG() : CGRADFGBase() {
@@ -312,6 +324,35 @@ namespace llvm {
 			 * @return Otherwise, false
 			 */
 			bool connect(NodeType &Src, NodeType &Dst, EdgeType &E);
+
+			/**
+			 * @brief find in-coming edges and get the list of them
+			 * Unlike the same name method in @em llvm::DirectedGraph,
+			 * this keeps source nodes of the egdges.
+			 * If you want to ignore the virtual root, set ignore vroot to be true
+			 * 
+			 * @param N Node
+			 * @param EL a list of edge infomation (edges + src node)
+			 * @param ignore_vroot whether the virtual root is ignored or not (Default: false)
+			 * @return it returns true if any edges are found
+			 * @return Otherwise it returns false
+			 */
+			bool findIncomingEdgesToNode(const NodeType &N,
+							SmallVectorImpl<EdgeInfoType> &EL,
+							bool ignore_vroot = false) const {
+				assert(EL.empty() && "Expected the list of edges to be empty.");
+				EdgeListTy TempList;
+				for (auto *Node : Nodes) {
+					if (*Node == N)
+						continue;
+					if (ignore_vroot && *Node == getRoot()) continue;
+					if (Node->findEdgesTo(N, TempList)) {
+						EL.push_back(std::make_pair(Node,TempList));
+					}
+					TempList.clear();
+				}
+				return !EL.empty();
+			}
 
 			/**
 			 * @brief convert "Node_" + @a pointer style node name to more plain name
