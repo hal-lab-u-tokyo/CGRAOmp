@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  01-02-2022 11:45:50
-*    Last Modified: 01-02-2022 19:55:52
+*    Last Modified: 02-02-2022 11:08:12
 */
 
 #ifndef BALANCETREE_H
@@ -57,20 +57,63 @@ namespace CGRAOmp
 	 */
 	class BalanceTree : public PassInfoMixin<BalanceTree> {
 		public:
-			void run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
+			/**
+			 * @brief Apply tree height reduction for a given DFG
+			 * 
+			 * @param G Data flow graph (DFG)
+			 * @param L Loop associated with the DFGs
+			 * @param FAM FunctionAnalysisManager to access analysis results
+			 * @param LAM LoopAnalysisManager to access analysis results
+			 * @param AR LoopStandardAnalysisResults
+			 * @return It returns true if DFG G is changed
+			 * @return Otherwise, it returns false
+			 */
+			bool run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 										LoopAnalysisManager &LAM,
 										LoopStandardAnalysisResults &AR);
 		private:
 			using EdgeListTy = SmallVector<DFGEdge *, 10U>;
+			/**
+			 * @brief Initialize the graph weight
+			 * 
+			 * @param G Data flow graph to be balanced
+			 */
 			void initWeight(CGRADFG &G);
+
+			/**
+			 * @brief find candidates for root node
+			 * 
+			 * @param G Data flow graph to be balanced
+			 * @return SmallVector<ComputeNode*> a list of found candidates
+			 */
 			SmallVector<ComputeNode*> findRootCandidates(CGRADFG &G);
+
+			/**
+			 * @brief Balance the graph for a given root node
+			 * 
+			 * @param G Data flow graph to be balanced
+			 * @param Root Root node
+			 */
 			void toBalanced(CGRADFG &G, ComputeNode* Root);
 
+			// status storage
 			DenseMap<DFGNode*,int> weight;
 			IndexedMap<bool> visited;
 			SmallPtrSet<DFGNode*, 10> candidate_set;
+			bool changed;
 
+			/**
+			 * @brief map to decode operator precedence
+			 * @li key: Opcode of llvm::Instruction
+			 * @li value: the level of precedence (int)
+			 */
 			static std::map<int,int> OperatorPrecedence;
+
+			/**
+			 * @brief Function to obtain the precedence for a given ComputeNode
+			 * @param N the computational node
+			 * @return It returns integer of precedence level
+			 */
 			static int getOperatorPrecedence(ComputeNode* N) {
 				return OperatorPrecedence[N->getInst()->getOpcode()];
 			}

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 09:59:52
-*    Last Modified: 01-02-2022 15:16:37
+*    Last Modified: 02-02-2022 10:46:54
 */
 #ifndef DFGPASS_H
 #define DFGPASS_H
@@ -66,8 +66,10 @@ namespace CGRAOmp {
 		 * @param FAM FunctionAnalysisManager to access analysis results
 		 * @param LAM LoopAnalysisManager to access analysis results
 		 * @param AR LoopStandardAnalysisResults
+		 * @return It returns true if DFG G is changed
+		 * @return Otherwise, it returns false
 		 */
-		virtual void run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
+		virtual bool run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR) = 0;
 
@@ -88,10 +90,10 @@ namespace CGRAOmp {
 		DFGPassModel(DFGPassModel &&Arg) : Pass(std::move(Arg.Pass)) {}
 
 		/// Wrapper to run the implemented optimization function
-		void run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
+		bool run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR) override {
-			Pass.run(G, L, FAM, LAM, AR);
+			return Pass.run(G, L, FAM, LAM, AR);
 		};
 
 		/// Wrapper to get the name
@@ -120,13 +122,15 @@ namespace CGRAOmp {
 			/**
 			 * @brief Running all DFG Passes in order of registration to the pipeline
 			 * 
-			* @param G Data flow graph (DFG)
-			* @param L Loop associated with the DFGs
-			* @param FAM FunctionAnalysisManager to access analysis results
-			* @param LAM LoopAnalysisManager to access analysis results
-			* @param AR LoopStandardAnalysisResults
+			 * @param G Data flow graph (DFG)
+			 * @param L Loop associated with the DFGs
+			 * @param FAM FunctionAnalysisManager to access analysis results
+			 * @param LAM LoopAnalysisManager to access analysis results
+			 * @param AR LoopStandardAnalysisResults
+			 * @return It returns true if DFG G is changed
+			 * @return Otherwise, it returns false
 			 */
-			void run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
+			bool run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR);
 		private:

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 31-01-2022 13:50:42
+*    Last Modified: 02-02-2022 11:19:05
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -130,6 +130,9 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << "Cannot find any valid loop kernels\n");
 		return result;
 	}
+	DEBUG_WITH_TYPE(VerboseDebug,
+		dbgs() << DBG_DEBUG_PREFIX << "The number of kernels " 
+			   << loop_kernels.size() << "\n");
 
 	std::function<AGCompatibility(Loop*)> ag_verify_adaptor;
 
@@ -147,9 +150,6 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 	// verify each memory access
 
 	for (auto L : loop_kernels) {
-		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
-					<< "Verifying Affine AG compatibility of a loop: "
-					<< L->getName() << "\n");
 		auto compat = ag_verify_adaptor(L);
 		if (compat) {
 			result.registerKernel(L);

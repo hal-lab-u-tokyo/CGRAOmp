@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 01-02-2022 10:52:20
+#   Last Modified: 02-02-2022 11:11:48
 ###
 
 from argparse import ArgumentParser
@@ -90,6 +90,8 @@ def parser():
             "If it is not used, a default path (INSTALL_PREFIX/lib/) will be used")
     argparser.add_argument("--enable-cgraomp-debug", action="store_true",\
                             help="enables debug message during CGRAOmp Passes")
+    argparser.add_argument("-debug-only", type=str, default="",
+                            help="Enable a specific type of debug output (comma separeted list of types\n")
     # general options
     argparser.add_argument("-o", dest="output", type=str, metavar="<file>",\
             help="write final binary to <file>")
@@ -110,8 +112,8 @@ def parser():
     argparser.add_argument("--arch", type=str, default="x86_64", \
             metavar="<str>", help="specify the target cpu architecture" + \
             "(default: x86)")
-    argparser.add_argument("-Xc", dest="clang_args", action="append", \
-            metavar="<arg>", help="Pass <arg> to the back-end clang")
+    argparser.add_argument("-Xclang", dest="clang_args", action="append", \
+            metavar="<arg>", help="Pass <arg> to the clang")
     argparser.add_argument("-save-temps", action="store_true", \
             help="save intermediate compilation files")
     # for DFGs
@@ -133,8 +135,18 @@ def parser():
 
 def parseCGRAOmpArgs(args):
     options = []
+
+    debug_only_list = []
     if args.enable_cgraomp_debug:
-        options.append("-debug-only=cgraomp" + (",cgraomp-verbose" if args.verbose else ""))
+        debug_only_list.append("cgraomp")
+        if args.verbose:
+            debug_only_list.append("cgraomp-verbose")
+    for debug_target in args.debug_only.strip().split(","):
+        if not debug_target in debug_only_list:
+            debug_only_list.append(debug_target)
+
+    if len(debug_only_list) > 0:
+        options.append("-debug-only=" + ",".join(debug_only_list))
 
     # look up the specified libs
     if not args.load_dfg_pass_plugin is None:
@@ -183,7 +195,7 @@ def run(msg, cmd, verbose = False, childEnv = os.environ):
                     file = sys.stdout, flush = True)
 
     if verbose:
-        print("command: ", cmd)
+        print("command: ", " ".join(cmd))
 
     if len(proc_err) > 0:
         sys.stderr.buffer.write(proc_err)
@@ -198,7 +210,7 @@ def run(msg, cmd, verbose = False, childEnv = os.environ):
 def clangIn(sources, outfile, arch, extra_args, verbose):
     pass_args = [ _ for _ in extra_args ]
     cmd = ["clang", "-O0", "-S", "-emit-llvm", "-Xclang",
-            "-disable-O0-optnone", "-fopenmp", "-ffast-math"]
+            "-disable-O0-optnone", "-fopenmp"]
 
     # color output preference
     if "-fno-diagnostics-color" not in extra_args:
@@ -259,7 +271,6 @@ def passCGRAOmp(infile, outfile, libpath, config, options, verbose):
     cmd += ["-cm", config]
     cmd += [infile]
     cmd += ["-o", outfile]
-    # cmd += ["-load-dfg-pass-plugin", f"{libpath}/libTestDFGPass.so", "--dfg-pass-pipeline=test,test"]
     cmd += options
     return run("Verify kernel, extract DFG, and insert runtime",\
                 cmd, verbose)

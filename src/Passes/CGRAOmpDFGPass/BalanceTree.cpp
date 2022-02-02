@@ -25,8 +25,9 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  01-02-2022 11:44:11
-*    Last Modified: 01-02-2022 19:51:45
+*    Last Modified: 02-02-2022 11:10:02
 */
+#include "common.hpp"
 #include "DFGPass.hpp"
 #include "BalanceTree.hpp"
 
@@ -35,6 +36,7 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/ADT/PriorityQueue.h"
+#include "llvm/Support/Debug.h"
 
 #include <algorithm>
 #include <queue>
@@ -43,8 +45,12 @@ using namespace llvm;
 using namespace CGRAOmp;
 using namespace std;
 
+#define DEBUG_TYPE "balance-tree"
+static const char *VerboseDebug = DEBUG_TYPE "-verbose";
+
 /**
- * @details It is a similar setting to precedence table of @em clang
+ * @details 
+ * It is a similar setting to precedence table of @em clang
  * But the lower level means the higher priority
  * @see clang/Basic/OperatorPrecedence.h
  */
@@ -57,25 +63,32 @@ map<int, int> BalanceTree::OperatorPrecedence({
 });
 
 
-void BalanceTree::run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
+bool BalanceTree::run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR)
 {
+	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Running Balance Tree Optimization for "
+				<< G.getName() << "\n");
 	// reset status
 	visited.clear();
 	visited.grow(G.size() - 1);
 	weight.clear();
 	candidate_set.clear();
+	changed = false;
 
+	// initialize graph weight
 	initWeight(G);
+	// balance the graph iteratively
 	for (auto root : findRootCandidates(G)) {
 		toBalanced(G, root);
 	}
+	return changed;
 }
 
 
 void BalanceTree::initWeight(CGRADFG &G)
 {
+	// initial status: weight = 0, visited = false
 	for (auto *N : G) {
 		if (*N == G.getRoot()) continue;
 		weight[N] = 0;
@@ -148,6 +161,8 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 {
 	queue<DFGNode*> worklist;
 	SmallVector<DFGNode*> replaced;
+	// lammda for sorting priority queue of DFGNode*
+	// lowest weighted node is first
 	auto compare = [&](DFGNode* lhs, DFGNode *rhs) {
 		return weight[lhs] > weight[rhs];
 	};
@@ -159,7 +174,8 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 	// mark as visited
 	visited[Root->getID()] = true;
 
-	errs() << "Balancing at " << Root->getUniqueName() << "\n";
+	DEBUG_WITH_TYPE(VerboseDebug, dbgs() << INFO_DEBUG_PREFIX << "Graph balancing at "
+				<< Root->getUniqueName() << "\n");
 
 	// Add predecessors of root to worklist
 	in_edges.clear();
@@ -194,28 +210,27 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 	}
 
 	// nothing to do
-	errs() << "leaves " << leaves.size() << "\n";
 	if (leaves.size() == 0 ) return;
 
-	errs() << "leaves for balancing at " << Root->getUniqueName() << "\n";
-	errs() << "remove ";
+	changed = true;
+	// disconnect the nodes
 	for (auto N : replaced) {
-		errs() << N->getUniqueName() << " ";
 		G.removeNode(*N);
 		N->clear();
 	}
-	errs() << "tempolrary\n";
+
 	int pos = 0;
+	// reconstruct the graph 
 	while (leaves.size() > 2) {
 		auto Ra1 = leaves.top(); leaves.pop();
 		auto Rb1 = leaves.top(); leaves.pop();
 		auto T = replaced[pos++];
 		weight[T] = weight[Ra1] + weight[Rb1];
-		errs() << formatv("connect {0}, {1} to {2}\n",
+		DEBUG_WITH_TYPE(VerboseDebug,
+			dbgs() << DBG_DEBUG_PREFIX << formatv("connect {0}, {1} to {2}\n",
 							Ra1->getUniqueName(),
 							Rb1->getUniqueName(),
-							T->getUniqueName());
-		errs() << "Weight of " << T->getUniqueName() << " " << weight[T] << "\n";
+							T->getUniqueName()));
 		G.addNode(*T);
 		G.connect(*Ra1, *T, *(new DFGEdge(*T, 0)));
 		G.connect(*Rb1, *T, *(new DFGEdge(*T, 1)));

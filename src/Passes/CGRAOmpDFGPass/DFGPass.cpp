@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 01-02-2022 12:37:26
+*    Last Modified: 02-02-2022 10:56:33
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -37,6 +37,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/DynamicLibrary.h"
+#include "llvm/Support/Debug.h"
 
 #include "common.hpp"
 #include "DFGPass.hpp"
@@ -61,6 +62,18 @@ static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
 DFGPassBuilder::DFGPassBuilder()
 {
+	// register built in DFGPasses
+	callback_list.push_back(
+		[](StringRef Name, DFGPassManager &PM) {
+			#define DFG_PASS(NAME, CREATE_PASS) \
+				if (Name ==  NAME) { \
+					PM.addPass(CREATE_PASS); \
+					return true; \
+				}
+			#include "BuiltInDFGPasses.def"
+			return false;
+		});
+
 	// search for plugins
 	Error E = search_callback();
 	if (E) {
@@ -135,15 +148,17 @@ Error DFGPassBuilder::parsePassPipeline(DFGPassManager &DPM, ArrayRef<std::strin
 	return ErrorSuccess();
 }
 
-void DFGPassManager::run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
+bool DFGPassManager::run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR)
 {
+	bool changed = false;
 	// iterate for all the passes
 	for (auto pass : pipeline) {
 		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "applying " << pass->name() << "\n");
-		pass->run(G, L, FAM, LAM, AR);
+		changed |= pass->run(G, L, FAM, LAM, AR);
 	}
+	return changed;
 }
 
 DFGPassHandler::DFGPassHandler() : DPB(new DFGPassBuilder()), DPM(new DFGPassManager())
@@ -293,10 +308,6 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	}
 
 	// // apply tree height reduction if needed
-	// if (!OptDisableTreeHeightReduction) {
-	// 	G = reduce_tree_height(G);
-	// }
-	DPM->addPass(BalanceTree());
 	DPM->run(G, L, FAM, LAM, AR);
 
 	Error E = G.saveAsDotGraph(L.getName().str() + ".dot");
