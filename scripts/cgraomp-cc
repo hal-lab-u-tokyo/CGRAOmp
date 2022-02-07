@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 02-02-2022 11:11:48
+#   Last Modified: 07-02-2022 15:43:35
 ###
 
 from argparse import ArgumentParser
@@ -64,7 +64,9 @@ O2_FLAGS += ["-targetlibinfo", "-tti", "-tbaa", "-scoped-noalias-aa", "-assumpti
 POLLY_CANONICALIZE_LIKE = ["-mem2reg", "-early-cse", "-instcombine", "-simplifycfg", "-tailcallelim", "-simplifycfg", "-reassociate", "-loop-rotate", "-licm", "-indvars"]
 
 # -constmerge, -constprop, -die, -ipconstprop, 
-PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine", "-instsimplify", "--early-cse", "-dce", "-loop-unroll", "-reassociate", "-early-cse", "-gvn", "-constmerge", "-ffast-math", "--unroll-allow-partial", "-simplifycfg", "-instcombine", "-polly-canonicalize"]]
+# PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine", "-instsimplify", "--early-cse", "-dce", "-loop-unroll", "--unroll-allow-partial", "--scalar-evolution", "-memoryssa", "-loop-simplify", "-reassociate", "-early-cse", "-gvn", "-constmerge", "-simplifycfg", "-instcombine", "-polly-canonicalize"]]
+
+PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-loop-unroll", "--unroll-allow-partial", "-simplifycfg", "-loop-simplify", "-loop-rotate", "-mem2reg", "-instcombine", "-instsimplify", "--early-cse", "-dce",  "--scalar-evolution", "-memoryssa", "-gvn", "-constmerge", "-simplifycfg", "-instcombine", "-polly-canonicalize"]]
 
 #POLLY_CANONICALIZE_LIKE]
 # ["-simplifycfg", "-polly-canonicalize", "-instsimplify", "-instcombine", "--indvars"]]
@@ -121,6 +123,8 @@ def parser():
                             help="list of paths of DFG Pass plugins")
     argparser.add_argument("--dfg-pass-pipeline", type=str,
                             help="A textual description of the pass pipeline for DFG optimization")
+    argparser.add_argument("--visualize-dfg", action="store_true",
+                            help="")
     # for other options
     argparser.add_argument("-Xcgraomp", dest="cgraomp_args", \
                             action="append", metavar="<arg>", \
@@ -239,9 +243,9 @@ def cgraPreOpt(infile, outfile, verbose):
     for config in PRE_OPTS:
         cmd = ["opt", "-S"]
         cmd += config
-#        cmd += ["--debug-pass=Arguments"]
         cmd += [infile, "-o", outfile]
         ret = run("Pre-Optimization of CGRA kernel code", cmd, verbose)
+
         if not ret:
             return ret
 

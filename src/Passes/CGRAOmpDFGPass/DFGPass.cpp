@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 02-02-2022 10:56:33
+*    Last Modified: 07-02-2022 16:56:41
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -214,8 +214,6 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR)
 {
-	node_count = 0;
-
 	//get decoupled memory access for the kernel
 	auto &DA = LAM.getResult<DecoupledAnalysisPass>(L, AR);
 	//get the CGRA model
@@ -254,14 +252,14 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 			if (auto *imap = model->isSupported(inst)) {
 				// Computational node
 				auto NewNode = make_comp_node(inst, imap->getMapName());
-				G.addNode(*NewNode);
+				NewNode = G.addNode(*NewNode);
 				user_to_node[v] = NewNode;
 				inst->print(errs());
 				errs() << " " << inst->hasAllowReassoc() << " "<< "\n";
 			} else if (isMemAccess(*inst)) {
 				// Memory access node
 				auto NewNode = make_mem_node(*inst);
-				G.addNode(*NewNode);
+				NewNode = G.addNode(*NewNode);
 				user_to_node[v] = NewNode;
 			} else {
 				inst->print(errs() << "LLVM instruction ");
@@ -294,11 +292,11 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 				} else if (auto *c = dyn_cast<Constant>(operand)) {
 					// Constant value
 					src = make_const_node(c);
-					G.addNode(*src);
+					src = G.addNode(*src);
 				}
 				if (src) {
 					auto NewEdge = new DFGEdge(*dst, i);
-					G.connect(*src, *dst, *NewEdge);
+					assert(G.connect(*src, *dst, *NewEdge) && "Trying to connect non-exist nodes");
 				}
 			} else {
 				LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << " Non User type is an operand of ";
@@ -309,6 +307,9 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 
 	// // apply tree height reduction if needed
 	DPM->run(G, L, FAM, LAM, AR);
+
+	// errs() << F.getParent()->getModuleIdentifier() << "\n";
+	// errs() << F.getParent()->getSourceFileName() << "\n";
 
 	Error E = G.saveAsDotGraph(L.getName().str() + ".dot");
 	if (E) {

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 30-01-2022 19:47:36
+*    Last Modified: 03-02-2022 16:58:24
 */
 
 #include "llvm/Support/CommandLine.h"
@@ -75,6 +75,9 @@ cl::list<string> CGRAOmp::OptDFGPassPipeline("dfg-pass-pipeline",
 cl::list<string> CGRAOmp::OptDFGPassPlugin("load-dfg-pass-plugin", 
 			cl::value_desc("<Path string>"),
 			cl::desc("Load DFG pass plugin"));
+
+cl::opt<string> CGRAOmp::OptDFGFilePrefix("dfg-file-prefix",
+			cl::value_desc("<string>"), cl::desc("The prefix used for the data flow graph name (default)"));
 
 /**
  * @details It parses a string based on a regular expression

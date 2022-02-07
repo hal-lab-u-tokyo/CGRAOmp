@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  01-02-2022 11:44:11
-*    Last Modified: 02-02-2022 11:10:02
+*    Last Modified: 07-02-2022 16:11:40
 */
 #include "common.hpp"
 #include "DFGPass.hpp"
@@ -71,7 +71,6 @@ bool BalanceTree::run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 				<< G.getName() << "\n");
 	// reset status
 	visited.clear();
-	visited.grow(G.size() - 1);
 	weight.clear();
 	candidate_set.clear();
 	changed = false;
@@ -92,7 +91,7 @@ void BalanceTree::initWeight(CGRADFG &G)
 	for (auto *N : G) {
 		if (*N == G.getRoot()) continue;
 		weight[N] = 0;
-		visited[N->getID()] = false;
+		visited[N] = false;
 	}
 	// visit topological order
 	for (auto *N : breadth_first(&G)) {
@@ -172,7 +171,7 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 	SmallVector<CGRADFG::EdgeInfoType> in_edges;
 
 	// mark as visited
-	visited[Root->getID()] = true;
+	visited[Root] = true;
 
 	DEBUG_WITH_TYPE(VerboseDebug, dbgs() << INFO_DEBUG_PREFIX << "Graph balancing at "
 				<< Root->getUniqueName() << "\n");
@@ -192,7 +191,7 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 		if (auto comp_node = dyn_cast<ComputeNode>(T)) {
 			if (candidate_set.contains(comp_node)) {
 				// balancing the subexpressions
-				if (!visited[T->getID()]) {
+				if (!visited[T]) {
 					toBalanced(G, comp_node);
 				}
 				leaves.push(T);

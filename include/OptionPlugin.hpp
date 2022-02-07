@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:20:02
-*    Last Modified: 30-01-2022 19:46:40
+*    Last Modified: 03-02-2022 16:58:49
 */
 #ifndef OptionPlugin_H
 #define OptionPlugin_H
@@ -182,6 +182,8 @@ namespace CGRAOmp
 
 	/// path list to load user DFG pass libraries
 	extern cl::list<string> OptDFGPassPlugin;
+
+	extern cl::opt<string> OptDFGFilePrefix;
 
 }
 

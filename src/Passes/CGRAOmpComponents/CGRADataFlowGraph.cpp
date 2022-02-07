@@ -25,13 +25,14 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 01-02-2022 15:27:20
+*    Last Modified: 07-02-2022 17:22:28
 */
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/ADT/BreadthFirstIterator.h"
 
 #include "CGRADataFlowGraph.hpp"
 #include "OptionPlugin.hpp"
@@ -65,11 +66,20 @@ string ConstantNode::getConstStr() const
 }
 
 /* ================== Implementation of CGRADFG ================== */
-bool CGRADFG::addNode(NodeType &N)
+CGRADFG::NodeType* CGRADFG::addNode(NodeType &N)
 {
+	// check if the same node is already added
+	for (auto V : this->Nodes) {
+		if (N == *V) {
+			return V;
+		}
+	}
 	auto E = new DFGEdge(N);
-	auto result = CGRADFGBase::addNode(N);
-	return result && CGRADFGBase::connect(getRoot(), N, *E);
+	if (CGRADFGBase::addNode(N)) {
+		return CGRADFGBase::connect(getRoot(), N, *E) ? &N : nullptr;
+	} else {
+		return nullptr;
+	}
 }
 
 bool CGRADFG::connect(NodeType &Src, NodeType &Dst, EdgeType &E)
@@ -93,6 +103,9 @@ bool CGRADFG::connect(NodeType &Src, NodeType &Dst, EdgeType &E)
 Error CGRADFG::saveAsDotGraph(StringRef filepath)
 {
 	bool human_readable = CGRAOmp::OptDFGPlainNodeName;
+	if (human_readable) {
+		this->makeSequentialNodeID();
+	}
 	// open file
 	error_code EC;
 	raw_fd_ostream File(filepath, EC, sys::fs::OpenFlags::F_Text);
@@ -116,6 +129,16 @@ Error CGRADFG::saveAsDotGraph(StringRef filepath)
 		return errorCodeToError(EC);
 	}
 	return ErrorSuccess();
+}
+
+void CGRADFG::makeSequentialNodeID()
+{
+	int count = 0;
+	for (auto N : breadth_first(this)) {
+		if (N != &(this->getRoot())) {
+			N->ID = count++;
+		}
+	}
 }
 
 

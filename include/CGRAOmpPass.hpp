@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 31-01-2022 13:45:48
+*    Last Modified: 02-02-2022 11:34:50
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -109,6 +109,11 @@ namespace CGRAOmp {
 			CGRAModel *model;
 	};
 
+	/**
+	 * @class ModelManagerFunctionProxy
+	 * @brief A proxy to access model manager from function passes
+	 * @remark In advance of access, ModelManagerPass must be executed because of the cache meachanism of the AnalysisManager
+	 */
 	class ModelManagerFunctionProxy : public AnalysisInfoMixin<ModelManagerFunctionProxy> {
 		public:
 			using Result = ModelManager;
@@ -118,6 +123,11 @@ namespace CGRAOmp {
 			static AnalysisKey Key;
 	};
 
+	/**
+	 * @class ModelManagerLoopProxy
+	 * @brief A proxy to access model manager from loop passes
+	 * @remark In advance of access, ModelManagerPass must be executed because of the cache meachanism of the AnalysisManager
+	 */
 	class ModelManagerLoopProxy : public AnalysisInfoMixin<ModelManagerLoopProxy> {
 		public:
 			using Result = ModelManager;

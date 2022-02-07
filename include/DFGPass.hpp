@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 09:59:52
-*    Last Modified: 02-02-2022 10:46:54
+*    Last Modified: 07-02-2022 16:09:16
 */
 #ifndef DFGPASS_H
 #define DFGPASS_H
@@ -246,9 +246,11 @@ namespace CGRAOmp {
 			 */
 			inline DFGNode* make_mem_node(Instruction &I) {
 				if (isa<LoadInst>(I)) {
-					return new MemAccessNode<DFGNode::NodeKind::MemLoad>(node_count++, &I);
+					auto addr = I.getOperand(0);
+					return new MemAccessNode<DFGNode::NodeKind::MemLoad>(addr);
 				} else {
-					return new MemAccessNode<DFGNode::NodeKind::MemStore>(node_count++, &I);
+					auto addr = I.getOperand(1);
+					return new MemAccessNode<DFGNode::NodeKind::MemStore>(addr);
 				}
 			}
 			/**
@@ -258,7 +260,7 @@ namespace CGRAOmp {
 			 * @return DFGNode* a pointer to the node
 			 */
 			inline DFGNode* make_comp_node(Instruction *inst, std::string opcode) {
-				return new ComputeNode(node_count++, inst, opcode);
+				return new ComputeNode(inst, opcode);
 			}
 
 			/**
@@ -268,10 +270,8 @@ namespace CGRAOmp {
 			 * @return DFGNode* a pointer to the node
 			 */
 			inline DFGNode* make_const_node(Constant *C) {
-				return new ConstantNode(node_count++, C);
+				return new ConstantNode(C);
 			}
-
-			int node_count = 0;
 
 			DFGPassBuilder *DPB;
 			DFGPassManager *DPM;

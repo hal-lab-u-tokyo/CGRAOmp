@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 01-02-2022 16:28:08
+*    Last Modified: 07-02-2022 17:32:50
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -44,6 +44,7 @@
 
 #include <string>
 #include <utility>
+#include <stdint.h>
 
 using namespace CGRAOmp;
 using namespace std;
@@ -54,6 +55,7 @@ using namespace std;
 namespace llvm {
 	class DFGNode;
 	class DFGEdge;
+	class CGRADFG;
 	using DFGNodeBase = DGNode<DFGNode, DFGEdge>;
 	using DFGEdgeBase = DGEdge<DFGNode, DFGEdge>;
 	using CGRADFGBase = DirectedGraph<DFGNode, DFGEdge>;
@@ -64,6 +66,7 @@ namespace llvm {
 	*/
 	class DFGNode : public DFGNodeBase {
 		public:
+			friend CGRADFG;
 			enum class NodeKind {
 				Compute,
 				MemLoad,
@@ -75,6 +78,9 @@ namespace llvm {
 
 			DFGNode(int ID, NodeKind kind, Value *val) :
 				DFGNodeBase(), ID(ID), kind(kind), val(val) {};
+
+			DFGNode(NodeKind kind, Value* val) :
+				DFGNode((std::uintptr_t)(val), kind, val) {}
 
 			DFGNode(const DFGNode &N) {
 				*this = N;
@@ -103,6 +109,10 @@ namespace llvm {
 			virtual string getUniqueName() const = 0;
 			virtual string getNodeAttr() const = 0;
 			virtual string getExtraInfo() const { return ""; };
+
+			bool isEqualTo(const DFGNode &N) const {
+				return this->ID == N.ID;
+			}
 
 		protected:
 			NodeKind kind;
@@ -133,8 +143,8 @@ namespace llvm {
 	*/
 	class ComputeNode : public DFGNode {
 		public:
-			ComputeNode(int ID, Instruction* inst, std::string opcode) : 
-				DFGNode(ID, DFGNode::NodeKind::Compute, inst), opcode(opcode) {}
+			ComputeNode(Instruction* inst, std::string opcode) : 
+				DFGNode(DFGNode::NodeKind::Compute, inst), opcode(opcode) {}
 
 			string getUniqueName() const {
 				return opcode + "_" + to_string(getID());
@@ -155,8 +165,8 @@ namespace llvm {
 	template<DFGNode::NodeKind KIND>
 	class MemAccessNode : public DFGNode {
 		public:
-			MemAccessNode(int ID, Instruction *inst) : 
-					DFGNode(ID, KIND, inst) {
+			MemAccessNode(Value *addr) : 
+					DFGNode(KIND, addr) {
 				_isLoad = KIND == DFGNode::NodeKind::MemLoad;
 			}
 
@@ -174,16 +184,30 @@ namespace llvm {
 				}
 			}
 			string getNodeAttr() const {
+				string type;
 				switch (KIND) {
 					case DFGNode::NodeKind::MemLoad:
-						return  "type=input";
+						type = "input";
+						break;
 					case DFGNode::NodeKind::MemStore:
-						return  "type=output";
+						type = "output";
+						break;
 					default:
 						assert("Unexprected node kind for memory access node");
 						return "";
 				}
+				return formatv("type={0},data={1}", type, getSymbol());
 			}
+
+			string getSymbol() const {
+				if (auto gep = dyn_cast<GetElementPtrInst>(val)) {
+					auto *ptr = gep->getPointerOperand();
+					return string(ptr->getName());
+				} else {
+					return "unknown";
+				}
+			}
+
 			static bool classof(const DFGNode* N) {
 				return N->getKind() == NodeKind::MemLoad ||
 						N->getKind() == NodeKind::MemStore;
@@ -194,8 +218,8 @@ namespace llvm {
 
 	class ConstantNode : public DFGNode {
 		public:
-			ConstantNode(int ID, Constant *c) : 
-				DFGNode(ID, DFGNode::NodeKind::Constant, c) {}
+			ConstantNode(Constant *c) : 
+				DFGNode(DFGNode::NodeKind::Constant, c) {}
 			string getUniqueName() const {
 				return "Const_" + to_string(getID());
 			}
@@ -306,13 +330,15 @@ namespace llvm {
 			}
 
 			/**
-			 * @brief add a new node to the graph
-			 * 
+			 * @brief  add a new node to the graph
+			 *
 			 * @param N a DFG node to be added
-			 * @return true in the case of no error
-			 * @return Otherwise, false
+			 * @return NodeType* actually added node
+			 * If an node same as the passed node N is already added,
+			 * it returns the pointer of that node.
+			 * In case of error, it returns nullptr;
 			 */
-			bool addNode(NodeType &N);
+			NodeType* addNode(NodeType &N);
 
 			/**
 			 * @brief connect two nodes with an edge
@@ -387,6 +413,8 @@ namespace llvm {
 			string getName() const {
 				return name;
 			}
+
+			void makeSequentialNodeID();
 
 		private:
 

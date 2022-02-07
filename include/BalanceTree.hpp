@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  01-02-2022 11:45:50
-*    Last Modified: 02-02-2022 11:08:12
+*    Last Modified: 07-02-2022 16:11:05
 */
 
 #ifndef BALANCETREE_H
@@ -36,7 +36,6 @@
 
 #include "llvm/IR/PassManager.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/IndexedMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/IR/Instruction.h"
@@ -98,7 +97,7 @@ namespace CGRAOmp
 
 			// status storage
 			DenseMap<DFGNode*,int> weight;
-			IndexedMap<bool> visited;
+			DenseMap<DFGNode*,bool> visited;
 			SmallPtrSet<DFGNode*, 10> candidate_set;
 			bool changed;
 
