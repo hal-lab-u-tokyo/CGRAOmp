@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 07-02-2022 16:56:41
+*    Last Modified: 09-02-2022 20:45:07
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -299,10 +299,15 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 					assert(G.connect(*src, *dst, *NewEdge) && "Trying to connect non-exist nodes");
 				}
 			} else {
-				LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << " Non User type is an operand of ";
-							user->print(dbgs()); dbgs() << "\n");
+				LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX;
+							user->getOperand(i)->print(dbgs() << " Non User type ");
+							user->print(dbgs() << " is an operand of "); dbgs() << "\n");
 			}
 		}
+	}
+
+	if (OptDFGPlainNodeName) {
+		G.makeSequentialNodeID();
 	}
 
 	// // apply tree height reduction if needed

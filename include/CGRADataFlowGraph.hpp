@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 07-02-2022 17:32:50
+*    Last Modified: 09-02-2022 18:47:18
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -199,10 +199,29 @@ namespace llvm {
 				return formatv("type={0},data={1}", type, getSymbol());
 			}
 
+			/**
+			 * @brief Get a symbol name to be accessed
+			 * @return string the symbol
+			 * If a symbol is not found, it return "unknown"
+			 */
 			string getSymbol() const {
 				if (auto gep = dyn_cast<GetElementPtrInst>(val)) {
 					auto *ptr = gep->getPointerOperand();
-					return string(ptr->getName());
+					if (isa<Argument>(*ptr)) {
+						if (ptr->hasName()) {
+							return string(ptr->getName());
+						}
+					} else if (auto load = dyn_cast<LoadInst>(ptr)) {
+						auto child_ptr = load->getPointerOperand();
+						if (isa<Argument>(*child_ptr)) {
+							if (child_ptr->hasName()) {
+								return string(child_ptr->getName());
+							}
+						}
+					} else if (auto *alloc_inst = dyn_cast<AllocaInst>(ptr)) {
+						return string(alloc_inst->getName());
+					}
+					return "unknown";
 				} else {
 					return "unknown";
 				}

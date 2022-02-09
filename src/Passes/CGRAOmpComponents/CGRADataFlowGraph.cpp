@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 07-02-2022 17:22:28
+*    Last Modified: 08-02-2022 19:03:16
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -103,9 +103,6 @@ bool CGRADFG::connect(NodeType &Src, NodeType &Dst, EdgeType &E)
 Error CGRADFG::saveAsDotGraph(StringRef filepath)
 {
 	bool human_readable = CGRAOmp::OptDFGPlainNodeName;
-	if (human_readable) {
-		this->makeSequentialNodeID();
-	}
 	// open file
 	error_code EC;
 	raw_fd_ostream File(filepath, EC, sys::fs::OpenFlags::F_Text);

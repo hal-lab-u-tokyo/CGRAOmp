@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 07-02-2022 15:43:35
+#   Last Modified: 09-02-2022 11:10:34
 ###
 
 from argparse import ArgumentParser
@@ -39,44 +39,24 @@ import subprocess
 from pathlib import Path
 from shutil import get_terminal_size
 from functools import reduce
-import random
-import string
+import tempfile
+
 
 installed_dir = str(Path(__file__).parent.parent.absolute())
 default_libdir = installed_dir + "/lib"
 
-TARGET_FMT = "{target}-unknown-linux-gnu"
-OMP_TARGET_FMT = "openmp-{target}"
-RED_STR = "\x1b[31m{0}\x1b[39m"
-MAGENTA_STR = "\x1b[35m{0}\x1b[39m"
-GREEN_STR = "\x1b[32m{0}\x1b[39m"
-BOLD_STR = "\x1b[1m{0}\x1b[0m"
+sys.path.append(default_libdir)
 
-WARNING_STR = MAGENTA_STR.format(BOLD_STR.format("Warning"))
-ERROR_STR = RED_STR.format(BOLD_STR.format("Error"))
-
-OPT_FLAGS = {"-O0", "-O1", "-O2", "-O3", "-Os", "-Oz"}
-O2_FLAGS = ["-tti", "-tbaa", "-scoped-noalias-aa", "-assumption-cache-tracker", "-targetlibinfo", "-verify", "-ee-instrument", "-simplifycfg", "-domtree", "-sroa", "-early-cse", "-lower-expect"]
-O2_FLAGS += ["-targetlibinfo", "-tti", "-tbaa", "-scoped-noalias-aa", "-assumption-cache-tracker", "-profile-summary-info", "-annotation2metadata", "-forceattrs", "-inferattrs", "-ipsccp", "-called-value-propagation", "-globalopt", "-domtree", "-mem2reg", "-deadargelim", "-domtree", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-simplifycfg", "-basiccg", "-globals-aa", "-prune-eh", "-inline", "-openmpopt", "-function-attrs", "-domtree", "-sroa", "-basic-aa", "-aa", "-memoryssa", "-early-cse-memssa", "-speculative-execution", "-aa", "-lazy-value-info", "-jump-threading", "-correlated-propagation", "-simplifycfg", "-domtree", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-libcalls-shrinkwrap", "-loops", "-postdomtree", "-branch-prob", "-block-freq", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-pgo-memop-opt", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-tailcallelim", "-simplifycfg", "-reassociate", "-domtree", "-loops", "-loop-simplify", "-lcssa-verification", "-lcssa", "-basic-aa", "-aa", "-scalar-evolution", "-loop-rotate", "-memoryssa", "-lazy-branch-prob", "-lazy-block-freq", "-licm", "-loop-unswitch", "-simplifycfg", "-domtree", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-loop-simplify", "-lcssa-verification", "-lcssa", "-scalar-evolution", "-loop-idiom", "-indvars", "-loop-deletion", "-loop-unroll", "-sroa", "-aa", "-mldst-motion", "-phi-values", "-aa", "-memdep", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-gvn", "-phi-values", "-basic-aa", "-aa", "-memdep", "-memcpyopt", "-sccp", "-demanded-bits", "-bdce", "-aa", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-lazy-value-info", "-jump-threading", "-correlated-propagation", "-postdomtree", "-adce", "-basic-aa", "-aa", "-memoryssa", "-dse", "-loops", "-loop-simplify", "-lcssa-verification", "-lcssa", "-aa", "-scalar-evolution", "-lazy-branch-prob", "-lazy-block-freq", "-licm", "-simplifycfg", "-domtree", "-basic-aa", "-aa", "-loops", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-barrier", "-elim-avail-extern", "-basiccg", "-rpo-function-attrs", "-globalopt", "-globaldce", "-basiccg", "-globals-aa", "-domtree", "-float2int", "-lower-constant-intrinsics", "-domtree", "-loops", "-loop-simplify", "-lcssa-verification", "-lcssa", "-basic-aa", "-aa", "-scalar-evolution", "-loop-rotate", "-loop-accesses", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-loop-distribute", "-postdomtree", "-branch-prob", "-block-freq", "-scalar-evolution", "-basic-aa", "-aa", "-loop-accesses", "-demanded-bits", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-inject-tli-mappings", "-loop-vectorize", "-loop-simplify", "-scalar-evolution", "-aa", "-loop-accesses", "-lazy-branch-prob", "-lazy-block-freq", "-loop-load-elim", "-basic-aa", "-aa", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-simplifycfg", "-domtree", "-loops", "-scalar-evolution", "-basic-aa", "-aa", "-demanded-bits", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-inject-tli-mappings", "-slp-vectorizer", "-vector-combine", "-opt-remark-emitter", "-instcombine", "-loop-simplify", "-lcssa-verification", "-lcssa", "-scalar-evolution", "-loop-unroll", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instcombine", "-memoryssa", "-loop-simplify", "-lcssa-verification", "-lcssa", "-scalar-evolution", "-lazy-branch-prob", "-lazy-block-freq", "-licm", "-opt-remark-emitter", "-transform-warning", "-alignment-from-assumptions", "-strip-dead-prototypes", "-globaldce", "-constmerge", "-cg-profile", "-domtree", "-loops", "-postdomtree", "-branch-prob", "-block-freq", "-loop-simplify", "-lcssa-verification", "-lcssa", "-basic-aa", "-aa", "-scalar-evolution", "-block-freq", "-loop-sink", "-lazy-branch-prob", "-lazy-block-freq", "-opt-remark-emitter", "-instsimplify", "-div-rem-pairs", "-simplifycfg", "-annotation-remarks", "-verify"]
-
-# PRE_OPTS = [["-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine", , "-polly-canonicalize", "--polly-allow-dereference-of-all-function-parameters"], ["-instcombine", "-licm"]]
-
-POLLY_CANONICALIZE_LIKE = ["-mem2reg", "-early-cse", "-instcombine", "-simplifycfg", "-tailcallelim", "-simplifycfg", "-reassociate", "-loop-rotate", "-licm", "-indvars"]
-
-# -constmerge, -constprop, -die, -ipconstprop, 
-# PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-simplifycfg", "-loop-simplify",  "-loop-rotate", "-mem2reg", "-instcombine", "-instsimplify", "--early-cse", "-dce", "-loop-unroll", "--unroll-allow-partial", "--scalar-evolution", "-memoryssa", "-loop-simplify", "-reassociate", "-early-cse", "-gvn", "-constmerge", "-simplifycfg", "-instcombine", "-polly-canonicalize"]]
-
-PRE_OPTS = [["--indvars", "--indvars-widen-indvars", "-loop-unroll", "--unroll-allow-partial", "-simplifycfg", "-loop-simplify", "-loop-rotate", "-mem2reg", "-instcombine", "-instsimplify", "--early-cse", "-dce",  "--scalar-evolution", "-memoryssa", "-gvn", "-constmerge", "-simplifycfg", "-instcombine", "-polly-canonicalize"]]
-
-#POLLY_CANONICALIZE_LIKE]
-# ["-simplifycfg", "-polly-canonicalize", "-instsimplify", "-instcombine", "--indvars"]]
-#  "--loop-rotate", "-indvars", "-dce", , "-loop-simplify", "-instcombine"
-# , "-O3"], [
-# PRE_OPTS = [["-simplifycfg", "-loop-simplify",  "-loop-rotate", "-instcombine", "-mem2reg", "--frame-pointer=all"]]
-# PRE_OPTS = [["-O1"]]
-
+from cc_config.Config import *
 
 IMM_FILES = []
+
+try:
+    import graphviz as g
+    visualize_graph = lambda engine, infile, outfile : \
+        g.render(engine, filepath=infile, outfile=outfile, quiet=True)
+except ModuleNotFoundError:
+    visualize_graph = lambda engine, infile, outfile : None
 
 def parser():
     description = "OVERVIEW: CGRA OpenMP compiler driver based on LLVM/clang"
@@ -118,6 +98,10 @@ def parser():
             metavar="<arg>", help="Pass <arg> to the clang")
     argparser.add_argument("-save-temps", action="store_true", \
             help="save intermediate compilation files")
+    argparser.add_argument("--preopt-pipeline", dest="preopt", action="append", \
+            metavar="<opt1>,<opt2>,<opt3>,...", \
+            help="specify applied optimization passes to LLVM-IR at pre-optimization stage"\
+                "instead of the default setting (comma separated)")
     # for DFGs
     argparser.add_argument("--load-dfg-pass-plugin", type=str, nargs="*", \
                             help="list of paths of DFG Pass plugins")
@@ -131,7 +115,7 @@ def parser():
                             help="Pass <arg> to CGRA OpenMP")
 
     # default setting
-    argparser.set_defaults(opt="-O2", clang_args=[], cgraomp_args=[])
+    argparser.set_defaults(opt="-O2", clang_args=[], cgraomp_args=[], preopt=[])
 
     args = argparser.parse_args()
 
@@ -245,6 +229,7 @@ def cgraPreOpt(infile, outfile, verbose):
         cmd += config
         cmd += [infile, "-o", outfile]
         ret = run("Pre-Optimization of CGRA kernel code", cmd, verbose)
+        infile = outfile
 
         if not ret:
             return ret
@@ -301,8 +286,10 @@ def main():
         add_imm = lambda f: None
         temp_basename = basename
     else:
-        tmp_dirs = "/tmp"
-        temp_basename = basename + "-" + get_random_str(8)
+        # get safe temporary file name
+        tf = tempfile.NamedTemporaryFile(prefix=basename + "_")
+        temp_basename = tf.name
+        tf.close()
         add_imm = lambda f: addImmFile(f)
 
     # compile C source to bundled LLVM-IR
@@ -328,7 +315,7 @@ def main():
         return
 
     # pre-optimize kernel IR
-    if not cgraPreOpt(cgra_unbundle_name, cgra_unbundle_name, args.verbose):
+    if not cgraPreOpt(cgra_unbundle_name, cgra_unbundle_name + ".opt.ll", args.verbose):
         return
 
     # run CGRAOmp Passes
@@ -337,7 +324,7 @@ def main():
                     args.cgraomp_lib_path
 
     options = parseCGRAOmpArgs(args)
-    if passCGRAOmp(cgra_unbundle_name, cgra_post_name, libpath, \
+    if passCGRAOmp(cgra_unbundle_name + ".opt.ll", cgra_post_name, libpath, \
                         args.cgra_config, options, args.verbose):
         add_imm(cgra_post_name)
     else:
@@ -350,9 +337,6 @@ def cleanUp():
     for f in IMM_FILES:
         os.remove(f)
 
-def get_random_str(length):
-   return ''.join([random.choice(string.ascii_letters + string.digits) \
-                for _ in range(length)])
 
 if __name__ == "__main__":
     try:

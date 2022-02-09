@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 09:59:52
-*    Last Modified: 07-02-2022 16:09:16
+*    Last Modified: 08-02-2022 19:37:34
 */
 #ifndef DFGPASS_H
 #define DFGPASS_H
@@ -245,12 +245,14 @@ namespace CGRAOmp {
 			 * @return DFGNode* a pointer to the node
 			 */
 			inline DFGNode* make_mem_node(Instruction &I) {
-				if (isa<LoadInst>(I)) {
-					auto addr = I.getOperand(0);
+				if (auto load = dyn_cast<LoadInst>(&I)) {
+					auto addr = load->getPointerOperand();
 					return new MemAccessNode<DFGNode::NodeKind::MemLoad>(addr);
-				} else {
-					auto addr = I.getOperand(1);
+				} else if (auto store = dyn_cast<StoreInst>(&I)) {
+					auto addr = store->getPointerOperand();
 					return new MemAccessNode<DFGNode::NodeKind::MemStore>(addr);
+				} else {
+					assert(false && "Non-memory access instruction");
 				}
 			}
 			/**
