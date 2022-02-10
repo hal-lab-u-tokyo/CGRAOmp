@@ -10,7 +10,7 @@
 	"inter-loop-dependency": {
 		"allowed": false
 	},
-	"custom_instructions": [ "fexp", "fsin", "fcos", "fpow"],
+	"custom_instructions": [ "fexp", "fsin", "fcos", "fpow", "FMA"],
 	"generic_instructions": [
 		"add", "sub", "mul", "udiv", "sdiv", "and", "or", "xor", "fadd",
 		"fsub", "fmul", "fdiv"

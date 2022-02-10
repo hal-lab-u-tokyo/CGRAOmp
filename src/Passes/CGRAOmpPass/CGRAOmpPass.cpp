@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 01-02-2022 11:06:23
+*    Last Modified: 19-02-2022 14:01:48
 */
 #include "common.hpp"
 #include "CGRAOmpPass.hpp"
@@ -158,6 +158,11 @@ OmpKernelAnalysisPass::Result OmpKernelAnalysisPass::run(Module &M,
 					}
 				}
 			}
+		}
+	}
+	for (auto &F : M) {
+		if (F.getName().startswith("__nv_MAIN__F")) {
+			result[F.getName()] = &F;
 		}
 	}
 	return result;

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 02-02-2022 11:19:05
+*    Last Modified: 10-02-2022 17:38:40
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -203,8 +203,9 @@ SmallVector<Loop*> VerifyPassBase<DerivedT>::findPerfectlyNestedLoop(Function &F
 				int max_nest = inLN->getMaxPerfectDepth();
 
 				if (inLN->getNestDepth() == inLN->getMaxPerfectDepth()) {
-					LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << 
-						"Detected perfectly nested loop: " << inL->getName() << 
+					LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX <<
+						"Detected perfectly nested loop in " << LN->getNestDepth()
+						<< " nested loop kernel: " << inL->getName() <<
 						" Nested level " << max_nest << "\n");
 					loop_kernels.push_back(inL);
 					break;

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 09:59:52
-*    Last Modified: 08-02-2022 19:37:34
+*    Last Modified: 14-02-2022 13:26:24
 */
 #ifndef DFGPASS_H
 #define DFGPASS_H
@@ -268,11 +268,11 @@ namespace CGRAOmp {
 			/**
 			 * @brief create constant node
 			 * 
-			 * @param I The constant value
+			 * @param V Value corresponding the constant
 			 * @return DFGNode* a pointer to the node
 			 */
-			inline DFGNode* make_const_node(Constant *C) {
-				return new ConstantNode(C);
+			inline DFGNode* make_const_node(Value *V) {
+				return new ConstantNode(V);
 			}
 
 			DFGPassBuilder *DPB;

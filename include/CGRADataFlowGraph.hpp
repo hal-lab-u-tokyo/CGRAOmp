@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 09-02-2022 18:47:18
+*    Last Modified: 14-02-2022 13:43:24
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -237,8 +237,9 @@ namespace llvm {
 
 	class ConstantNode : public DFGNode {
 		public:
-			ConstantNode(Constant *c) : 
-				DFGNode(DFGNode::NodeKind::Constant, c) {}
+			ConstantNode(Value *v) :
+				DFGNode(DFGNode::NodeKind::Constant, v) {}
+
 			string getUniqueName() const {
 				return "Const_" + to_string(getID());
 			}
@@ -252,8 +253,27 @@ namespace llvm {
 				return N->getKind() == NodeKind::Constant;
 			}
 		private:
-			Constant *const_value;
 			string getConstStr() const;
+
+			string getTypeName(Type* ty) const {
+				switch (ty->getTypeID()) {
+					case Type::BFloatTyID:
+						return "float16";
+					case Type::FloatTyID:
+						return "float32";
+					case Type::DoubleTyID:
+						return "float64";
+					case Type::FP128TyID:
+						return "float128";
+					case Type::IntegerTyID:
+					{
+						auto intty = dyn_cast<IntegerType>(ty);
+						return formatv("int{0}", intty->getBitWidth());
+					}
+					default:
+						return "unknown";
+				}
+			}
 
 			string getFloatType(APFloat f) const {
 				switch (APFloatBase::SemanticsToEnum(f.getSemantics())) {

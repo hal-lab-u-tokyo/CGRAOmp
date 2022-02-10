@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 09-02-2022 11:10:34
+#   Last Modified: 19-02-2022 16:18:19
 ###
 
 from argparse import ArgumentParser
@@ -40,7 +40,8 @@ from pathlib import Path
 from shutil import get_terminal_size
 from functools import reduce
 import tempfile
-
+from collections import defaultdict
+from unittest import skip
 
 installed_dir = str(Path(__file__).parent.parent.absolute())
 default_libdir = installed_dir + "/lib"
@@ -102,11 +103,16 @@ def parser():
             metavar="<opt1>,<opt2>,<opt3>,...", \
             help="specify applied optimization passes to LLVM-IR at pre-optimization stage"\
                 "instead of the default setting (comma separated)")
+    argparser.add_argument("--enable-custom-inst", dest="custominst_en", \
+            action="store_true", \
+            help="Enable user-defiend custom instructions to generate DFG")
     # for DFGs
     argparser.add_argument("--load-dfg-pass-plugin", type=str, nargs="*", \
                             help="list of paths of DFG Pass plugins")
     argparser.add_argument("--dfg-pass-pipeline", type=str,
                             help="A textual description of the pass pipeline for DFG optimization")
+    argparser.add_argument("--dfg-file-prefix", type=str,
+                            help="The prefix used for the data flow graph name")
     argparser.add_argument("--visualize-dfg", action="store_true",
                             help="")
     # for other options
@@ -159,6 +165,8 @@ def parseCGRAOmpArgs(args):
         options.append(f"--load-dfg-pass-plugin={path_to_lib}")
     if args.dfg_pass_pipeline:
         options.append("-dfg-pass-pipeline=" + args.dfg_pass_pipeline)
+    if args.dfg_file_prefix:
+        options.append("-dfg-file-prefix=" + args.dfg_file_prefix)
 
     options.extend(args.cgraomp_args)
     return options
@@ -223,12 +231,14 @@ def hostOpt(infile, outfile, opt_level):
     cmd = ["opt", opt_level, infile, "-S", "-o", outfile]
     return run("Optimization of host code", cmd)
 
-def cgraPreOpt(infile, outfile, verbose):
-    for config in PRE_OPTS:
+def cgraPreOpt(opt_configs, infile, outfile, verbose):
+    suffix = defaultdict(lambda: "th")
+    for i in range(len(opt_configs)):
+        config = opt_configs[i]
         cmd = ["opt", "-S"]
         cmd += config
         cmd += [infile, "-o", outfile]
-        ret = run("Pre-Optimization of CGRA kernel code", cmd, verbose)
+        ret = run(f"{i+1}{suffix[i+1]} Pre-Optimization of CGRA kernel code", cmd, verbose)
         infile = outfile
 
         if not ret:
@@ -282,9 +292,8 @@ def main():
         basename = p.stem
 
     if args.save_temps:
-        tmp_dirs = outdir
         add_imm = lambda f: None
-        temp_basename = basename
+        temp_basename = "{0}/{1}".format(outdir,basename)
     else:
         # get safe temporary file name
         tf = tempfile.NamedTemporaryFile(prefix=basename + "_")
@@ -292,17 +301,28 @@ def main():
         tf.close()
         add_imm = lambda f: addImmFile(f)
 
-    # compile C source to bundled LLVM-IR
-    bundled_name = "{0}/{1}.bundled.ll".format(tmp_dirs,temp_basename)
-    if clangIn(args.files, bundled_name, args.arch, \
-                     args.clang_args, args.verbose):
-        add_imm(bundled_name)
-    else:
-        return
+    skip_clang = False
+    if len(args.files) == 1:
+        p = Path(args.files[0])
+        if p.suffix == ".ll" or p.suffix == ".bc":
+            skip_clang = True
+            bundled_name = args.files[0]
+
+    if args.custominst_en:
+        args.clang_args.append("-DCGRAOMP_WITH_CUSTOM_INST")
+
+    if not skip_clang:
+        # compile C source to bundled LLVM-IR
+        bundled_name = "{0}.bundled.ll".format(temp_basename)
+        if clangIn(args.files, bundled_name, args.arch, \
+                        args.clang_args, args.verbose):
+            add_imm(bundled_name)
+        else:
+            return
 
     # unbundle LLVM-IR
-    host_unbundle_name = "{0}/{1}.host.ll".format(tmp_dirs,temp_basename)
-    cgra_unbundle_name = "{0}/{1}.cgra.ll".format(tmp_dirs,temp_basename)
+    host_unbundle_name = "{0}.host.ll".format(temp_basename)
+    cgra_unbundle_name = "{0}.cgra.ll".format(temp_basename)
     if unbundle(bundled_name, host_unbundle_name, cgra_unbundle_name,\
                      args.arch, args.verbose):
         add_imm(host_unbundle_name)
@@ -315,16 +335,34 @@ def main():
         return
 
     # pre-optimize kernel IR
-    if not cgraPreOpt(cgra_unbundle_name, cgra_unbundle_name + ".opt.ll", args.verbose):
+    if args.save_temps:
+        cgra_preopt_name = "{0}.cgra.preopt.ll".format(temp_basename)
+    else:
+        # overwrite IR
+        cgra_preopt_name = cgra_unbundle_name
+
+    if len(args.preopt) == 0:
+        # use default settings
+        if args.opt == "O0":
+            opt_config = PRE_OPTS_O0
+        else:
+            opt_config = PRE_OPTS
+    else:
+        opt_config = [pipeline.split(",") for pipeline in args.preopt]
+
+    if args.custominst_en:
+        opt_config[0] = ["--always-inline"] + opt_config[0]
+
+    if not cgraPreOpt(opt_config, cgra_unbundle_name, cgra_preopt_name, args.verbose):
         return
 
     # run CGRAOmp Passes
-    cgra_post_name = "{0}/{1}.cgra.post.ll".format(tmp_dirs,temp_basename)
+    cgra_post_name = "{0}.cgra.post.ll".format(temp_basename)
     libpath = default_libdir if args.cgraomp_lib_path is None else \
                     args.cgraomp_lib_path
 
     options = parseCGRAOmpArgs(args)
-    if passCGRAOmp(cgra_unbundle_name + ".opt.ll", cgra_post_name, libpath, \
+    if passCGRAOmp(cgra_preopt_name, cgra_post_name, libpath, \
                         args.cgra_config, options, args.verbose):
         add_imm(cgra_post_name)
     else:

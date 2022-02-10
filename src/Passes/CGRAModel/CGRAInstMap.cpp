@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 31-01-2022 13:49:06
+*    Last Modified: 11-02-2022 00:23:24
 */
 
 
@@ -345,9 +345,9 @@ bool BinaryOpMapEntry::match(Instruction *I)
 bool MemoryOpMapEntry::match(Instruction *I)
 {
 	if (auto binop = dyn_cast<LoadInst>(I)) {
-		return kind == Instruction::MemoryOps::Load;
+		return mem_kind == Instruction::MemoryOps::Load;
 	} else if (auto binop = dyn_cast<StoreInst>(I)) {
-		return kind == Instruction::MemoryOps::Store;
+		return mem_kind == Instruction::MemoryOps::Store;
 	} else {
 		return false;
 	}
@@ -500,7 +500,7 @@ Expected<pair<StringRef,MapCondition*>>  CGRAOmp::createMapCondition(json::Objec
 		auto unhandledErr = handleErrors(
 			std::move(flags.takeError()),
 			handler);
-		if (unhandledErr) return unhandledErr;
+		if (unhandledErr) return std::move(unhandledErr);
 	} else {
 		if (auto E = map_cond->setFlags(flags.get())) {
 			return std::move(E);

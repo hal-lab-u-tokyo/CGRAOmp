@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 08-02-2022 19:03:16
+*    Last Modified: 14-02-2022 13:57:46
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -49,18 +49,23 @@ using namespace std;
 
 string ConstantNode::getConstStr() const
  {
-	Constant* const_value = dyn_cast<Constant>(val);
-	if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
-		return formatv("int{0}={1}", cint->getBitWidth(), cint->getSExtValue());
-	} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
-		auto apf = cfloat->getValueAPF();
-		float f = apf.convertToFloat();
-		return formatv("{0}={1}", getFloatType(apf), f);
+
+	auto type_str = getTypeName(val->getType());
+	if (Constant* const_value = dyn_cast<Constant>(val)) {
+		if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
+			return formatv("{0}={1}", type_str, cint->getSExtValue());
+		} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
+			auto apf = cfloat->getValueAPF();
+			float f = apf.convertToFloat();
+			return formatv("{0}={1}", type_str, f);
+		} else {
+			LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << " Unexpected constant type: ";
+						const_value->print(dbgs());
+						dbgs() << "\n"
+			);
+		}
 	} else {
-		LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << " Unexpected constant type: ";
-					const_value->print(dbgs());
-					dbgs() << "\n"
-		);
+		return formatv("{0}=\"data({1})\"", type_str, val->getName());
 	}
 	return "";
 }

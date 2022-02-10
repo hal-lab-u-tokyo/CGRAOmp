@@ -66,6 +66,7 @@ set (LLVM_PASSLIB_LIST
   CGRAOmpAnnotationPass
   CGRAModel
   CGRAOmpDFGPass
+  HelloDFGPass
 )
 
 # add for each lib

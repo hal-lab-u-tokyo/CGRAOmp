@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:35:11
-*    Last Modified: 31-01-2022 13:49:37
+*    Last Modified: 14-02-2022 11:05:34
 */
 
 #ifndef CGRAInstMap_H
@@ -251,25 +251,33 @@ namespace CGRAOmp
 	 */
 	class InstMapEntry {
 		public:
+			enum class InstMapKind {
+				BinaryOp,
+				CompOp,
+				MemOp,
+				CustomOp
+			};
+
 			/**
 			 * @brief Construct a new InstMapEntry object
 			 * 
 			 * @param opcode string of the instruction opcode
+ 			 * @param Kind Kind of the actual map entry
 			 */
-			InstMapEntry(StringRef opcode) :
-				opcode_str(opcode.str()) {
+			InstMapEntry(StringRef opcode, InstMapKind Kind) :
+				opcode_str(opcode.str()), Kind(Kind) {
 					map_cond = new MapCondition(opcode);
-				};
+			};
 
 			/**
 			 * @brief  Construct a new InstMapEntry object with an initial MapCondition instance
 			 * 
 			 * @param opcode string of the instruction opcode
+			 * @param Kind Kind of the actual map entry
 			 * @param cond mapping condition
 			 */
-			InstMapEntry(StringRef opcode, MapCondition* cond) :
-				opcode_str(opcode.str()), map_cond(cond) {
-				};
+			InstMapEntry(StringRef opcode, InstMapKind Kind, MapCondition* cond) :
+				opcode_str(opcode.str()), Kind(Kind), map_cond(cond) {};
 
 			~InstMapEntry() {
 				delete map_cond;
@@ -310,15 +318,22 @@ namespace CGRAOmp
 				return map_cond->getMapName();
 			}
 
-
 			void print(raw_ostream &OS);
 			void dump() {
 				print(errs());
 				errs() << "\n";
 			}
+
+			InstMapKind getKind() const {
+				return Kind;
+			}
+		private:
+			InstMapKind Kind;
 		protected:
 			MapCondition* map_cond;
 			std::string opcode_str;
+
+
 	};
 
 	/**
@@ -327,6 +342,8 @@ namespace CGRAOmp
 	 */
 	class BinaryOpMapEntry : public InstMapEntry {
 		public:
+			static constexpr InstMapEntry::InstMapKind BinaryOp =
+				 InstMapEntry::InstMapKind::BinaryOp;
 			/**
 			 * @brief Construct a new BinaryOpMapEntry object
 			 * 
@@ -334,7 +351,7 @@ namespace CGRAOmp
 			 * @param ops a type of binary operations
 			 */
 			BinaryOpMapEntry(StringRef opcode, Instruction::BinaryOps ops) :
-				InstMapEntry(opcode), ops(ops) {};
+				InstMapEntry(opcode, BinaryOp), ops(ops) {};
 
 			/**
 			 * @brief Construct a new BinaryOpMapEntry object with an initial MapCondition instance
@@ -345,12 +362,16 @@ namespace CGRAOmp
 			 */
 			BinaryOpMapEntry(StringRef opcode, Instruction::BinaryOps ops,
 								MapCondition* cond) :
-				InstMapEntry(opcode, cond), ops(ops) {};
+				InstMapEntry(opcode, BinaryOp, cond), ops(ops) {};
 
 			/**
 			 * @brief Derived function from InstMapEntry::match specilized for binary operation
 			 */
 			bool match(Instruction *I);
+
+			static bool classof(const InstMapEntry* imap) {
+				return imap->getKind() == BinaryOp;
+			}
 		private:
 			Instruction::BinaryOps ops;
 	};
@@ -361,6 +382,8 @@ namespace CGRAOmp
 	 */
 	class CompOpMapEntry : public InstMapEntry {
 		public:
+			static constexpr InstMapEntry::InstMapKind CompOp =
+			 InstMapEntry::InstMapKind::CompOp;
 			/**
 			 * @brief Construct a new CompOpMapEntry object
 			 * 
@@ -370,7 +393,7 @@ namespace CGRAOmp
 			 * 	- false: double type
 			 */
 			CompOpMapEntry(StringRef opcode, bool isInteger) :
-				InstMapEntry(opcode),
+				InstMapEntry(opcode, CompOp),
 				isInteger(isInteger) {};
 
 			/**
@@ -384,8 +407,12 @@ namespace CGRAOmp
 			 */
 			CompOpMapEntry(StringRef opcode, bool isInteger,
 							MapCondition *cond) :
-				InstMapEntry(opcode, cond),
+				InstMapEntry(opcode, CompOp, cond),
 				isInteger(isInteger) {};
+
+			static bool classof(const InstMapEntry* imap) {
+				return imap->getKind() == CompOp;
+			}
 
 			/**
 			 * @brief Derived function from InstMapEntry::match specilized for comparison instructions
@@ -401,6 +428,8 @@ namespace CGRAOmp
 	 */
 	class MemoryOpMapEntry : public InstMapEntry {
 		public:
+			static constexpr InstMapEntry::InstMapKind MemOp =
+				InstMapEntry::InstMapKind::MemOp;
 			/**
 			 * @brief Construct a new MemoryOpMapEntry object
 			 * 
@@ -408,8 +437,8 @@ namespace CGRAOmp
 			 * @param kind a type of memory instruction
 			 */
 			MemoryOpMapEntry(StringRef opcode, Instruction::MemoryOps kind) :
-				InstMapEntry(opcode),
-				kind(kind) {};
+				InstMapEntry(opcode, MemOp),
+				mem_kind(kind) {};
 			/**
 			 * @brief Construct a new MemoryOpMapEntry object
 			 *
@@ -419,15 +448,19 @@ namespace CGRAOmp
 			 */
 			MemoryOpMapEntry(StringRef opcode, Instruction::MemoryOps kind,
 								MapCondition *cond) :
-				InstMapEntry(opcode, cond),
-				kind(kind) {};
+				InstMapEntry(opcode, MemOp, cond),
+				mem_kind(kind) {};
+
+			static bool classof(const InstMapEntry* imap) {
+				return imap->getKind() == MemOp;
+			}
 
 			/**
 			 * @brief Derived function from InstMapEntry::match specilized for memory operation
 			 */
 			bool match(Instruction *I);
 		private:
-			Instruction::MemoryOps kind;
+			Instruction::MemoryOps mem_kind;
 	};
 
 	/**
@@ -436,6 +469,8 @@ namespace CGRAOmp
 	 */
 	class CustomInstMapEntry : public InstMapEntry {
 		public:
+			static constexpr InstMapEntry::InstMapKind CustomOp =
+				InstMapEntry::InstMapKind::CustomOp;
 			/**
 			 * @brief Construct a new CustomIns MapEntry object
 			 * 
@@ -444,7 +479,7 @@ namespace CGRAOmp
 			 */
 			CustomInstMapEntry(StringRef func_name, 
 								ModuleAnalysisManager &MAM) : 
-								InstMapEntry(func_name), MAM(MAM) {};
+								InstMapEntry(func_name, CustomOp), MAM(MAM) {};
 			/**
 			 * @brief Construct a new CustomInstMapEntry object with an initial MapCondition instance
 			 * 
@@ -455,7 +490,11 @@ namespace CGRAOmp
 			CustomInstMapEntry(StringRef func_name, 
 								ModuleAnalysisManager &MAM,
 								MapCondition* map_cond) :
-				InstMapEntry(func_name, map_cond), MAM(MAM) {};
+				InstMapEntry(func_name, CustomOp, map_cond), MAM(MAM) {};
+
+			static bool classof(const InstMapEntry* imap) {
+				return imap->getKind() == CustomOp;
+			}
 
 			/**
 			 * @brief Derived function from InstMapEntry::match specilized for custom instruction

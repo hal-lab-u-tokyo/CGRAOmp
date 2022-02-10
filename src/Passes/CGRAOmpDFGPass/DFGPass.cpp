@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 09-02-2022 20:45:07
+*    Last Modified: 19-02-2022 14:02:53
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -38,6 +38,9 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/Debug.h"
+
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/ADT/BreadthFirstIterator.h"
 
 #include "common.hpp"
 #include "DFGPass.hpp"
@@ -204,7 +207,7 @@ bool DFGPassHandler::createDataFlowGraphsForAllKernels(Function &F, FunctionAnal
 	auto AR = getLSAR(F, AM);
 	auto &LAM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
 	for (auto L : verify_result.kernels()) {
-		errs() << L->getName() << "\n";
+		// errs() << L->getName() << "\n";
 		createDataFlowGraph(F, *L, AM, LAM, AR);
 	}
 	return false;
@@ -220,6 +223,62 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	auto &MM = FAM.getResult<ModelManagerFunctionProxy>(F);
 	auto *model = MM.getModel();
 
+	// ---------- test ----------
+	// CGRADFG G;
+	// G.setName(L.getName().str());
+
+	// SmallPtrSet<Instruction*, 32> list;
+	// DenseMap<User*,DFGNode*> user_to_node;
+
+	// for (auto &BB : L.getBlocks()) {
+	// 	for (auto &I : *BB) {
+	// 		list.insert(&I);
+	// 		I.dump();
+	// 	}
+	// }
+
+	// errs() << "\n ---------- report ---------- \n";
+
+	// int count = 0;
+	// int edge_count = 0;
+	// int lc_edge = 0;
+	// int gep_edge = 0;
+	// int glb_count = 0;
+	// for (auto *I : list) {
+	// 	if (!isa<PHINode>(*I) && !isa<GetElementPtrInst>(*I) && 
+	// 		!isa<CmpInst>(*I) && !isa<BranchInst>(*I)) {
+	// 		for (int i = 0; i < I->getNumOperands(); i++) {
+	// 			auto operand = I->getOperand(i);
+	// 			if (!isa<Constant>(*operand)) {
+	// 				if (auto oi = dyn_cast<Instruction>(operand)) {
+	// 					if (!list.contains(oi)) {
+	// 						glb_count++;
+	// 					}
+	// 				}
+	// 				if (isa<PHINode>(*operand)) {
+	// 					lc_edge++;
+	// 				} else if (isa<GetElementPtrInst>(*operand)) {
+	// 					gep_edge++;
+	// 				} else {
+	// 					edge_count++;
+	// 				}
+	// 			}
+	// 		}
+	// 		I->print(errs());
+	// 		errs() << formatv(" --- {0} {1} {2} {3}\n", edge_count, lc_edge, gep_edge, glb_count);
+	// 		count++;
+	// 	}
+	// }
+	// errs() << "count " << count << formatv(" --- {0} {1} {2} {3}\n", edge_count, lc_edge, gep_edge, glb_count);
+	// errs() << "total node " << count + gep_edge << " " << edge_count + gep_edge * 2 << " " << lc_edge << "\n";
+	// for (auto *I : list) {
+	// 	if (isa<GetElementPtrInst>(*I)) {
+	// 		I->dump();
+	// 	}
+	// }
+
+	// ---------- end test ----------
+
 	// for (auto access : DA.loads()) {
 	// 	access->dump();
 	// }
@@ -227,21 +286,24 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	// 	access->dump();
 	// }
 
-	//SmallVector<Value*> NotReached(DA.stores());
+	SmallVector<Value*> NotReached(DA.stores());
 	SmallPtrSet<User*, 32> stores(DA.store_begin(), DA.store_end());
 	SmallPtrSet<User*, 32> traversed;
 	DenseMap<User*,DFGNode*> user_to_node;
+	SmallPtrSet<User*, 32> custom_op;
 
 	std::queue<User*> fifo;
 	CGRADFG G;
 	G.setName(L.getName().str());
 
 	// push memory loads to fifo
+	// errs() << "Loads\n";
 	for (User *v : DA.loads()) {
 		fifo.push(v);
 		traversed.insert(v);
+		// v->dump();
 	}
-
+	// errs() << "\n";
 	// traverse
 	// in this traversal, only instructions can appear
 	while (!fifo.empty()) {
@@ -250,12 +312,21 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 
 		if (auto *inst = dyn_cast<Instruction>(v)) {
 			if (auto *imap = model->isSupported(inst)) {
-				// Computational node
-				auto NewNode = make_comp_node(inst, imap->getMapName());
-				NewNode = G.addNode(*NewNode);
-				user_to_node[v] = NewNode;
-				inst->print(errs());
-				errs() << " " << inst->hasAllowReassoc() << " "<< "\n";
+				if (auto binop = dyn_cast<BinaryOpMapEntry>(imap)) {
+					// Computational node
+					auto NewNode = make_comp_node(inst, imap->getMapName());
+					NewNode = G.addNode(*NewNode);
+					user_to_node[v] = NewNode;
+					// inst->print(errs());
+					// // errs() << " " << inst->hasAllowReassoc() << " "<< "\n";
+					// errs() << "\n";
+				} else if (auto customop = dyn_cast<CustomInstMapEntry>(imap)) {
+					// errs() << "custom\n";
+					auto NewNode = make_comp_node(inst, customop->getMapName());
+					NewNode = G.addNode(*NewNode);
+					user_to_node[v] = NewNode;
+					custom_op.insert(v);
+				}
 			} else if (isMemAccess(*inst)) {
 				// Memory access node
 				auto NewNode = make_mem_node(*inst);
@@ -283,7 +354,14 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	for (auto entry : make_range(user_to_node.begin(), user_to_node.end())) {
 		auto user = entry.first;
 		DFGNode *dst = entry.second;
-		for (int i = 0; i < user->getNumOperands(); i++) {
+		int last_operand = user->getNumOperands();
+		if (custom_op.contains(user) || stores.contains(user)) {
+			last_operand--;
+		}
+		if (isa<LoadInst>(*user)) {
+			continue;
+		}
+		for (int i = 0; i < last_operand; i++) {
 			DFGNode* src = nullptr;
 			if (auto operand = dyn_cast<User>(user->getOperand(i))) {
 				if (user_to_node.find(operand) != user_to_node.end()) {
@@ -292,6 +370,16 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 				} else if (auto *c = dyn_cast<Constant>(operand)) {
 					// Constant value
 					src = make_const_node(c);
+					src = G.addNode(*src);
+				} else {
+					// data defined outside the loop
+					Value *last = operand;
+					while (isa<TruncInst>(*last) || isa<BitCastInst>(*last)) {
+						if (auto next = dyn_cast<User>(last)->getOperand(0)) {
+							last = next;
+						}
+					}
+					src = make_const_node(last);
 					src = G.addNode(*src);
 				}
 				if (src) {
@@ -310,17 +398,28 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		G.makeSequentialNodeID();
 	}
 
-	// // apply tree height reduction if needed
+
+	// apply tree height reduction if needed
 	DPM->run(G, L, FAM, LAM, AR);
 
-	// errs() << F.getParent()->getModuleIdentifier() << "\n";
-	// errs() << F.getParent()->getSourceFileName() << "\n";
-
-	Error E = G.saveAsDotGraph(L.getName().str() + ".dot");
+	std::string fname;
+	if (OptDFGFilePrefix != "") {
+		fname = formatv("{0}_{1}_{2}.dot", OptDFGFilePrefix, F.getName(), L.getName());
+	} else {
+		auto module_name = llvm::sys::path::stem(F.getParent()->getSourceFileName());
+		auto parent = llvm::sys::path::parent_path(F.getParent()->getSourceFileName());
+		if (parent == "") {
+			parent = ".";
+		}
+		fname = formatv("{0}/{1}_{2}_{3}.dot", parent, module_name,
+						 F.getName(), L.getName());
+	}
+	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Saving DFG: " << fname << "\n");
+	Error E = G.saveAsDotGraph(fname);
 	if (E) {
 		ExitOnError Exit(ERR_MSG_PREFIX);
 		Exit(std::move(E));
-	} 
+	}
 
 	// for (auto *v : post_order(&G)) {
 	// 	errs() << v->getUniqueName() << "\n";
