@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:30
-*    Last Modified: 17-09-2021 16:49:48
+*    Last Modified: 11-02-2022 00:46:49
 */
 #ifndef CGRAModel_H
 #define CGRAModel_H
@@ -75,8 +75,8 @@ namespace CGRAOmp
 			 * @brief a category of the CGRA model
 			 */
 			enum class CGRACategory {
-				/// Generic CGRAs
-				Generic,
+				/// time-multiplexed CGRAs
+				TimeMultiplexed,
 				/// A CGRA decoupling memory access & computation
 				Decoupled,
 			};
@@ -334,25 +334,25 @@ namespace CGRAOmp
 	};
 
 	/**
-	 * @class GenericCGRA
-	 * @brief CGRA model for category "generic"
+	 * @class TMCGRA
+	 * @brief CGRA model for category "time-multiplexed"
 	*/
-	class GenericCGRA : public CGRAModel {
+	class TMCGRA : public CGRAModel {
 		public:
 			/**
-			 * @brief Construct a new Generic CGRA object
+			 * @brief Construct a new time-multiplexed CGRA object
 			 * 
 			 * @param filename filename of the config file
 			 */
-			explicit GenericCGRA(StringRef filename) :
-				CGRAModel(filename, CGRACategory::Generic,
+			explicit TMCGRA(StringRef filename) :
+				CGRAModel(filename, CGRACategory::TimeMultiplexed,
 							ConditionalStyle::No,
 							InterLoopDep::No) {}
-			GenericCGRA(const GenericCGRA &);
+			TMCGRA(const TMCGRA &);
 
 			/// for downcasting from CGRAModel by llvm::dyn_cast
 			static bool classof(const CGRAModel *M) {
-				return M->getKind() == CGRAModel::CGRACategory::Generic;
+				return M->getKind() == CGRAModel::CGRACategory::TimeMultiplexed;
 			}
 
 		private:

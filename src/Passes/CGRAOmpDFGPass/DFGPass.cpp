@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 19-02-2022 14:02:53
+*    Last Modified: 11-02-2022 00:51:06
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -190,7 +190,7 @@ PreservedAnalyses DFGPassHandler::run(Module &M, ModuleAnalysisManager &AM)
 			case CGRAModel::CGRACategory::Decoupled:
 				createDataFlowGraphsForAllKernels<DecoupledVerifyPass>(*F, FAM);
 				break;
-			case CGRAModel::CGRACategory::Generic:
+			case CGRAModel::CGRACategory::TimeMultiplexed:
 				assert("not implemented now");
 				break;
 		}

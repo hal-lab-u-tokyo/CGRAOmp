@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 15-12-2021 11:20:05
+*    Last Modified: 11-02-2022 00:49:03
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -216,15 +216,15 @@ namespace CGRAOmp {
 	};
 
 	/**
-	 * @class GenericVerifyPass
-	 * @brief A function pass to verify the kernel for Generic CGRA
+	 * @class TimeMultiplexedVerifyPass
+	 * @brief A function pass to verify the kernel for TimeMultiplexed CGRA
 	*/
-	class GenericVerifyPass : public AnalysisInfoMixin<GenericVerifyPass> {
+	class TimeMultiplexedVerifyPass : public AnalysisInfoMixin<TimeMultiplexedVerifyPass> {
 		public:
 			using Result = VerifyResult;
 			Result run(Function &F, FunctionAnalysisManager &AM);
 		private:
-			friend AnalysisInfoMixin<GenericVerifyPass>;
+			friend AnalysisInfoMixin<TimeMultiplexedVerifyPass>;
 			static AnalysisKey Key;
 
 	};

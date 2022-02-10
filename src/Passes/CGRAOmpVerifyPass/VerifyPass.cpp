@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 10-02-2022 17:38:40
+*    Last Modified: 11-02-2022 00:53:55
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -79,21 +79,21 @@ bool VerifyResult::bool_operator_impl()
 	return !isViolate;
 }
 
-/* ================== Implementation of GenericVerifyPass ================== */
-AnalysisKey GenericVerifyPass::Key;
+/* ================== Implementation of TimeMultiplexedVerifyPass ================== */
+AnalysisKey TimeMultiplexedVerifyPass::Key;
 
-VerifyResult GenericVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
+VerifyResult TimeMultiplexedVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 {
 	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Verifying "
-				 << F.getName() << "for generic CGRA\n");
+				 << F.getName() << "for time-multiplexed CGRA\n");
 	VerifyResult result;
 
 	// get CGRA model
 	auto MM = AM.getResult<ModelManagerFunctionProxy>(F);
 	auto model = MM.getModel();
-	auto gene_model = model->asDerived<GenericCGRA>();
+	auto gene_model = model->asDerived<TMCGRA>();
 
-	assert(!"GenericVerifyPass is not implemented");
+	assert(!"TimeMultiplexedVerifyPass is not implemented");
 
 	return result;
 }
@@ -359,8 +359,8 @@ PreservedAnalyses VerifyModulePass::run(Module &M, ModuleAnalysisManager &AM)
 			case CGRAModel::CGRACategory::Decoupled:
 				{auto verify_res = FAM.getResult<DecoupledVerifyPass>(*F);}
 				break;
-			case CGRAModel::CGRACategory::Generic:
-				auto verify_res = FAM.getResult<GenericVerifyPass>(*F);
+			case CGRAModel::CGRACategory::TimeMultiplexed:
+				auto verify_res = FAM.getResult<TimeMultiplexedVerifyPass>(*F);
 				break;
 		}
 	}

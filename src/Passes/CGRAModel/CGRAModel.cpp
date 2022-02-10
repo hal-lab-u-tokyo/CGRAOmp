@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:46
-*    Last Modified: 10-12-2021 11:29:40
+*    Last Modified: 11-02-2022 00:47:30
 */
 #include "CGRAModel.hpp"
 
@@ -360,8 +360,8 @@ Expected<CGRAModel*> CGRAOmp::parseCGRASetting(StringRef filename,
 				}
 			}
 			break;
-		case CGRAModel::CGRACategory::Generic:
-			model = new GenericCGRA(filename);
+		case CGRAModel::CGRACategory::TimeMultiplexed:
+			model = new TMCGRA(filename);
 			break;
 		default:
 			auto config = make_pair<StringRef, StringRef>(CATEGORY_KEY,
@@ -416,7 +416,7 @@ Expected<CGRAModel*> CGRAOmp::parseCGRASetting(StringRef filename,
 /* =================== Implementation of CGRAModel class =================== */
 // valid settings for CGRA category
 StringMap<CGRAModel::CGRACategory> CGRAModel::CategoryMap({
-	make_pair("generic", CGRAModel::CGRACategory::Generic),
+	make_pair("time-multiplexed", CGRAModel::CGRACategory::TimeMultiplexed),
 	make_pair("decoupled", CGRAModel::CGRACategory::Decoupled),
 });
 // valid settings for Conditional Style
@@ -473,9 +473,9 @@ DecoupledCGRA::DecoupledCGRA(const DecoupledCGRA &rhs) :
 	}
 }
 
-GenericCGRA::GenericCGRA(const GenericCGRA &rhs) : CGRAModel(rhs)
+TMCGRA::TMCGRA(const TMCGRA &rhs) : CGRAModel(rhs)
 {
-	assert(!"Copy constructor for GenericCGRA is not implemented");
+	assert(!"Copy constructor for TMCGRA is not implemented");
 }
 
 AffineAG::AffineAG(const AffineAG& rhs) : AddressGenerator(rhs)

@@ -25,12 +25,12 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 12:50:15
-*    Last Modified: 14-12-2021 17:53:57
+*    Last Modified: 11-02-2022 00:51:36
 */
 #ifndef FUNCTION_ANALYSIS
 #define FUNCTION_ANALYSIS(CREATE_PASS)
 #endif
-FUNCTION_ANALYSIS(GenericVerifyPass())
+FUNCTION_ANALYSIS(TimeMultiplexedVerifyPass())
 FUNCTION_ANALYSIS(DecoupledVerifyPass())
 #undef FUNCTION_ANALYSIS
 
