@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  09-02-2022 10:12:26
-#   Last Modified: 09-02-2022 21:35:50
+#   Last Modified: 10-02-2022 16:15:32
 ###
 
 TARGET_FMT = "{target}-unknown-linux-gnu"
@@ -56,5 +56,5 @@ PRE_OPTS_O0 = [["-polly-canonicalize"]]
 
 # default setting for pre optimization when -O1 or higher level is specified
 PRE_OPTS = []
-PRE_OPTS.append(["--indvars", "--indvars-widen-indvars", "-loop-unroll", "--unroll-allow-partial", "-simplifycfg", "-loop-simplify", "-loop-rotate", "-mem2reg", "-instcombine", "-instsimplify", "--early-cse", "--early-cse-memssa", "-dce",  "--scalar-evolution", "-memoryssa", "-gvn", "-constmerge", "-simplifycfg", "-reassociate", "-instcombine", "-indvars", "-polly-canonicalize"])
+PRE_OPTS.append(["--indvars", "--indvars-widen-indvars", "--aa-pipeline=\"basic-aa,scoped-noalias-aa,tbaa,globals-aa,scev-aa\"", "-loop-unroll", "--unroll-allow-partial", "-simplifycfg", "-loop-simplify", "-loop-idiom", "-loop-instsimplify", "-loop-rotate", "-mem2reg", "-instcombine", "-loop-load-elim", "-instsimplify", "--early-cse", "--early-cse-memssa", "-dce",  "--scalar-evolution", "-memoryssa", "-gvn", "-constmerge", "-simplifycfg", "-reassociate", "-instcombine", "-indvars", "-polly-canonicalize"])
 
