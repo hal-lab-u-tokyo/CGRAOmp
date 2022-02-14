@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 14-02-2022 14:12:25
+*    Last Modified: 14-02-2022 15:30:22
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -185,19 +185,6 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		dbgs() << DBG_DEBUG_PREFIX << "The number of kernels " 
 			   << loop_kernels.size() << "\n");
 
-	// create adaptor depending on the model
-	std::function<AGCompatibility(Loop*)> ag_verify_adaptor;
-
-	switch (dec_model->getAG()->getKind()) {
-		case AddressGenerator::Kind::Affine:
-			ag_verify_adaptor = [&](Loop *L) {
-				return AG_verification<VerifyAffineAGCompatiblePass>(*L, LPM, AR);
-			};
-			break;
-		case AddressGenerator::Kind::FullState:
-			assert(!"FullState AG is not implemented yet");
-			break;
-	}
 
 	for (auto L : loop_kernels) {
 		LoopVerifyResult lvr;
@@ -218,7 +205,15 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		// verify conditional parts
 
 		// verify each memory access
-		auto ag_compat = ag_verify_adaptor(L);
+		VerifyResultBase *ag_compat;
+		switch (dec_model->getAG()->getKind()) {
+			case AddressGenerator::Kind::Affine:
+				ag_compat = &(LPM.getResult<VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>>(*L, AR));
+				break;
+			default:
+				llvm_unreachable("This type of AG is not implemted\n");
+		}
+		lvr.setResult(ag_compat);
 		if (lvr) {
 			result.registerKernel(L, lvr);
 		}
@@ -231,13 +226,13 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 					
 
 /* ===================== Implementation of DecoupledVerifyPass ===================== */
-template <typename AGVerifyPassT>
-AGCompatibility& DecoupledVerifyPass::AG_verification(Loop &L, LoopAnalysisManager &AM,
-								LoopStandardAnalysisResults &AR)
-{
-	return AM.getResult<AGVerifyPassT>(L, AR);
-	//result.setResult(VerificationKind::MemoryAccess, &ag_compat);
-}
+// template <typename AGVerifyPassT>
+// AGCompatibility& DecoupledVerifyPass::AG_verification(Loop &L, LoopAnalysisManager &AM,
+// 								LoopStandardAnalysisResults &AR)
+// {
+// 	return AM.getResult<AGVerifyPassT>(L, AR);
+// 	//result.setResult(VerificationKind::MemoryAccess, &ag_compat);
+// }
 
 /* ================= Implementation of VerifyPassBase ================= */
 /**
@@ -292,41 +287,14 @@ SmallVector<Loop*> VerifyPassBase<DerivedT>::findPerfectlyNestedLoop(Function &F
 	return std::move(loop_kernels);
 }
 
-// template <typename DerivedT>
-// Optional<SmallVector<Instruction*>> VerifyPassBase<DerivedT>::checkInstCompatibility(Loop& L, LoopAnalysisManager &AM,
-// 								LoopStandardAnalysisResults &AR)
-// {
-// 	auto LN = LoopNest::getLoopNest(L, AR.SE);
-// 	auto innermost = LN->getInnermostLoop();
+/* ============= Implementation of VerifyAGCompatiblePass ============= */
 
-// 	auto &MM = AM.getResult<ModelManagerLoopProxy>(L, AR);
-// 	auto *model = MM.getModel();
-
-// 	InstList unsupported;
-
-// 	for (auto &BB : innermost->getBlocks()) {
-// 		for (auto &I : *BB) {
-// 			auto *imap = model->isSupported(&I);
-// 			if (!imap) {
-// 				unsupported.emplace_back(&I);
-// 			}
-// 		}
-// 	}
-// 	if (unsupported.size() > 0) {
-// 		return None;
-// 	} else {
-// 		return Optional<InstList>(std::move(unsupported));
-// 	}
-// }								
-
-
-/* ============= Implementation of VerifyAffineAGCompatiblePass ============= */
-AnalysisKey VerifyAffineAGCompatiblePass::Key;
-
-AffineAGCompatibility VerifyAffineAGCompatiblePass::run(Loop &L,
+template <>
+VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::Result
+VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::run_impl(Loop &L,
 	LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR)
 {
-	Result result;
+	AffineAGCompatibility result;
 
 	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
 					<< "Verifying Affine AG compatibility of a loop: "
@@ -335,109 +303,16 @@ AffineAGCompatibility VerifyAffineAGCompatiblePass::run(Loop &L,
 	// get decoupled memory access insts
 	auto DA = AM.getResult<DecoupledAnalysisPass>(L, AR);
 
-	// load pattern
-	check_all<0>(DA.get_loads(), AR.SE);
-	// store pattern
-	check_all<1>(DA.get_stores(), AR.SE);
+	// // load pattern
+	// check_all<0>(DA.get_loads(), AR.SE);
+	// // store pattern
+	// check_all<1>(DA.get_stores(), AR.SE);
+
 
 	return result;
 }
 
 
-template<int N, typename T>
-bool VerifyAffineAGCompatiblePass::check_all(SmallVector<T*> &list,  ScalarEvolution &SE)
-{
-	// dump
-	// for (auto access : list) {
-	// 	access->dump();
-	// }
-
-	// // verify each address pattern
-	// for (auto access : list) {
-	// 	auto addr = access->getOperand(N);
-	// 	if (SE.isSCEVable(addr->getType())) {
-	// 		auto *s = SE.getSCEV(addr);
-	// 		s->dump();
-	// 		parseSCEV(s, SE);
-	// 	} else {
-	// 		//not Scalar evolution
-	// 	}
-	// }
-	return true;
-}
-
-// void VerifyAffineAGCompatiblePass::parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth) {
-// 	std::string indent =  std::string("\t", depth + 1);
-// 	errs() << "type: " << scev->getSCEVType() << "\n";
-// 	switch (scev->getSCEVType()) {
-// 		case SCEVTypes::scAddRecExpr:
-// 			{
-// 				auto *SAR = dyn_cast<SCEVAddRecExpr>(scev);
-// 				auto *start = SAR->getStart();
-// 				auto *step = SAR->getStepRecurrence(SE);
-// 				switch(step->getSCEVType()) {
-// 					case SCEVTypes::scConstant:
-// 						//OK
-// 						errs() << "step: ";
-// 						step->dump();
-// 						break;
-// 					default:
-// 						//error
-// 						errs() << "Step is not constant\n";
-// 						break;
-// 				}
-// 			}
-// 			break;
-// 		case SCEVTypes::scAddExpr:
-// 			{
-// 				auto *SA = dyn_cast<SCEVAddExpr>(scev);
-// 				SA->dump();
-// 			}
-// 			break;
-// 		case SCEVTypes::scUnknown:
-// 			{
-// 				auto *V = dyn_cast<SCEVUnknown>(scev)->getValue();
-// 				if (auto *arg = dyn_cast<Argument>(V)) {
-// 					// it is data transfer between host and device
-// 					// save symbol
-// 					arg->print(errs() << indent);
-// 					errs() << " is an arg\n";
-// 				}
-// 			}
-// 		default:
-// 			break;
-// 	}
-// }
-
-// void VerifyAffineAGCompatiblePass::parseSCEVAddRecExpr(const SCEVAddRecExpr *SAR,
-// 													ScalarEvolution &SE)
-// {
-// 	auto *start = SAR->getStart();
-// 	auto *step = SAR->getStepRecurrence(SE);
-// 	errs() << "start: ";
-// 	start->dump();
-// 	errs() << "step: ";
-// 	step->dump();
-
-// 	if (auto childSARC = dyn_cast<SCEVCastExpr>(start)) {
-// 		errs() << "start is constant\n";
-// 	} else if (auto *childSAR = dyn_cast<SCEVAddRecExpr>(start)) {
-// 		errs() << "start is rec\n";
-// 	} else if (auto *childSA = dyn_cast<SCEVAddExpr>(start)) {
-// 		errs() << "start is add expr\n";
-// 		for (auto hoge : childSA->operands()) {
-// 			errs() << "\t" << hoge->getSCEVType() << " ";
-// 			if (auto *childchildSM = dyn_cast<SCEVMulExpr>(hoge)) {
-
-// 			}
-// 			hoge->dump();
-// 			if (auto unknown = dyn_cast<SCEVUnknown>(hoge)) {
-// 				errs() << "\t\tunknown ";
-// 				parseSCUnknonw(unknown);
-// 			}
-// 		}
-// 	}
-// }
 
 /* ================== Implementation of VerifyModulePass ================== */
 PreservedAnalyses VerifyModulePass::run(Module &M, ModuleAnalysisManager &AM)

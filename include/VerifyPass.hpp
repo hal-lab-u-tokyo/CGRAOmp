@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 14-02-2022 14:06:01
+*    Last Modified: 14-02-2022 15:29:55
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -41,7 +41,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/ADT/iterator_range.h"
-
+#include "llvm/Support/Debug.h"
 
 #include "CGRAOmpPass.hpp"
 #include "DecoupledAnalysis.hpp"
@@ -288,42 +288,7 @@ namespace CGRAOmp {
 			LoopList findPerfectlyNestedLoop(Function &F,
 				LoopStandardAnalysisResults &AR);
 
-			// /**
-			//  * @brief default routine to vefity whether the kernel contains unspported instructions
-			//  * 
-			//  * @param L Loop
-			//  * @param AM LoopAnalysisManager
-			//  * @param AR LoopStandardAnalysisResults
-			//  * @return Optional<InstList> if any unsupported instructions are included, it returns a list of them, otherwise None.
-			//  */
-			// Optional<InstList>
-			// verifyUnsupportedInst(Loop& L, LoopAnalysisManager &AM,
-			// 					LoopStandardAnalysisResults &AR)
-			// {
-			// 	auto LN = LoopNest::getLoopNest(L, AR.SE);
-			// 	auto innermost = LN->getInnermostLoop();
-
-			// 	auto &MM = AM.getResult<ModelManagerLoopProxy>(L, AR);
-			// 	auto *model = MM.getModel();
-
-			// 	InstList unsupported;
-
-			// 	for (auto &BB : innermost->getBlocks()) {
-			// 		for (auto &I : *BB) {
-			// 			auto *imap = model->isSupported(&I);
-			// 			if (!imap) {
-			// 				unsupported.emplace_back(&I);
-			// 			}
-			// 		}
-			// 	}
-			// 	if (unsupported.size() > 0) {
-			// 		return None;
-			// 	} else {
-			// 		return Optional<InstList>(std::move(unsupported));
-			// 	}
-			// }	
-
-	};
+		};
 
 	/**
 	 * @class TimeMultiplexedVerifyPass
@@ -339,7 +304,7 @@ namespace CGRAOmp {
 
 	};
 
-	class AGCompatibility;
+	// class AGCompatibility;
 
 	/**
 	 * @class DecoupledVerifyPass
@@ -354,9 +319,9 @@ namespace CGRAOmp {
 			friend AnalysisInfoMixin<DecoupledVerifyPass>;
 			static AnalysisKey Key;
 
-			template <typename AGVerifyPassT>
-			AGCompatibility& AG_verification(Loop &L, LoopAnalysisManager &AM,
-								LoopStandardAnalysisResults &AR);
+			// template <typename AGVerifyPassT>
+			// AGCompatibility& AG_verification(Loop &L, LoopAnalysisManager &AM,
+			// 					LoopStandardAnalysisResults &AR);
 	};
 
 	/**
@@ -374,6 +339,12 @@ namespace CGRAOmp {
 
 			Result run(Loop &L, LoopAnalysisManager &AM,
 						LoopStandardAnalysisResults &AR) {
+				
+				#define DEBUG_TYPE "cgraomp"
+				LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
+					<< "Verifying insturction compatibility: "
+					<< L.getName() << "\n");
+				#undef DEBUG_TYPE
 
 				auto unsupported_insts = checkUnsupportedInst(L, AM, AR);
 				if (unsupported_insts.hasValue()) {
@@ -446,15 +417,16 @@ namespace CGRAOmp {
 	/**
 	 * @class AGCompatibility
 	 * @brief A derived class from VerifyResultBase describing whether the memory access pattern is compatible with the AGs or not
+	 * 
+	 * @tparam kind Kind of AddressGenerator
 	*/
+	template<AddressGenerator::Kind AGKind>
 	class AGCompatibility : public VerifyResultBase {
 		public:
 			/**
 			 * @brief Construct a new AGCompatibility object
-			 * 
-			 * @param kind type of the address generator
 			 */
-			explicit AGCompatibility(AddressGenerator::Kind kind) : kind(kind),
+			AGCompatibility() : ag_kind(AGKind),
 				VerifyResultBase(VerificationKind::MemoryAccess) {};
 			
 
@@ -468,11 +440,11 @@ namespace CGRAOmp {
 			 * @brief Get the Kind object
 			 * @return AddressGenerator::Kind 
 			 */
-			AddressGenerator::Kind getKind() const {
-				return kind;
+			AddressGenerator::Kind geAGtKind() const {
+				return ag_kind;
 			}
 		private:
-			AddressGenerator::Kind kind;
+			AddressGenerator::Kind ag_kind;
 
 	};
 
@@ -480,9 +452,9 @@ namespace CGRAOmp {
 	 * @class AffineAGCompatibility
 	 * @brief A derived class from AGCompatibility for affine AGs
 	*/
-	class AffineAGCompatibility : public AGCompatibility {
+	class AffineAGCompatibility : public AGCompatibility<AddressGenerator::Kind::Affine> {
 		public:
-			AffineAGCompatibility() : AGCompatibility(AddressGenerator::Kind::Affine)
+			AffineAGCompatibility() : AGCompatibility()
 			{};
 
 			/**
@@ -495,29 +467,57 @@ namespace CGRAOmp {
 				int64_t end;
 			} config_t;
 
-			static bool classof(const AGCompatibility* R) {
-				return R->getKind() == AddressGenerator::Kind::Affine;
+			// for dyn_cast from VerifyResultBase pointer
+			static bool classof(const VerifyResultBase* R) {
+				if (auto ag_compat = dyn_cast<AGCompatibility<AddressGenerator::Kind::Affine>>(R)) {
+					return ag_compat->geAGtKind() == AddressGenerator::Kind::Affine;
+				}
+				return false;
 			}
 		private:
 
 	};
 
 	/**
-	 * @class VerifyAffineAGCompatiblePass
+	 * @class VerifyAGCompatiblePass
 	 * @brief A function pass to verify the memory access pattern
+	 * 
+	 * @tparam Kind A Kind of Address Generator
+	 * 
+	 * @remarks This template needs specilization of @em run_impl method for each address generator type
 	*/
-	class VerifyAffineAGCompatiblePass :
-		public AnalysisInfoMixin<VerifyAffineAGCompatiblePass> {
+	template <AddressGenerator::Kind Kind>
+	class VerifyAGCompatiblePass :
+		public AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>> {
 		public:
-			using Result = AffineAGCompatibility;
+			using Result = AGCompatibility<Kind>;
 
 			Result run(Loop &L, LoopAnalysisManager &AM,
-						LoopStandardAnalysisResults &AR);
+						LoopStandardAnalysisResults &AR) {
+				switch (Kind) {
+					case AddressGenerator::Kind::Affine:
+						return run_impl(L, AM, AR);
+					default:
+						llvm_unreachable("This type of AG is not implemented\n");
+				}
+			};
 		private:
-			friend AnalysisInfoMixin<VerifyAffineAGCompatiblePass>;
+			friend AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>>;
 			friend DecoupledVerifyPass;
 			static AnalysisKey Key;
 			DecoupledCGRA *dec_model;
+
+
+			/**
+			 * @brief actual implementation of running pass
+			 * 
+			 * @param L Loop
+			 * @param AM LoopAnalysisManager
+			 * @param AR LoopStandardAnalysisResults
+			 * @return Result Derived class of the template AGCompatibility as an verificatio result
+			 */
+			Result run_impl(Loop &L, LoopAnalysisManager &AM,
+						LoopStandardAnalysisResults &AR);
 
 			/**
 			 * @brief parse the expression of addition between SCEVs
@@ -529,10 +529,13 @@ namespace CGRAOmp {
 										ScalarEvolution &SE);
 			void parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth = 0);
 
-			template<int N, typename T>
-			bool check_all(SmallVector<T*> &list, ScalarEvolution &SE);
+			// template<int N, typename T>
+			// bool check_all(SmallVector<T*> &list, ScalarEvolution &SE);
 
 	};
+
+	template <AddressGenerator::Kind Kind>
+	AnalysisKey VerifyAGCompatiblePass<Kind>::Key;
 
 	/**
 	 * @class VerifyModulePass
