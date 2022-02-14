@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 02-02-2022 11:34:50
+*    Last Modified: 14-02-2022 10:36:47
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -40,6 +40,9 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Error.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/iterator_range.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include "CGRAModel.hpp"
 
@@ -57,6 +60,8 @@
 using namespace llvm;
 
 #define KERNEL_INFO_PREFIX ".omp_offloading.entry"
+#define OFFLOADINFO_METADATA_NAME "omp_offload.info"
+#define OUTLINED_FUNC_NAME_FMT "__omp_offloading_{0:x-}_{1:x-}_{2}_l{3:d}"
 #define ADD_FUNC_PASS(P) (createModuleToFunctionPassAdaptor(P))
 #define ADD_LOOP_PASS(P) (createModuleToFunctionPassAdaptor(createFunctionToLoopPassAdaptor(P)))
 
@@ -139,17 +144,129 @@ namespace CGRAOmp {
 	};
 
 	/**
+	 * @class OmpKernelInfo
+	 * @brief A set of information regarding OpenMP target kernel
+	*/
+	class OmpKernelInfo {
+		public:
+			struct OffloadMetadata_t {
+				int metadata_kind;
+				int file_dev_ID;
+				int file_ID;
+				StringRef func_name;
+				int line;
+				int order;
+			};
+
+			/// implemented for enabling getCacheResult from inner modules
+			template <typename IRUnitT, typename InvT>
+			bool invalidate(IRUnitT& IR, const PreservedAnalyses &PA,
+								InvT &Inv);
+
+			using MetadataList = SmallVector<OffloadMetadata_t>;
+			using md_iterator = MetadataList::iterator;
+
+			using FunctionList = SmallVector<Function*>;
+			using func_iterator = FunctionList::iterator;
+
+
+			// metadata itarators
+			inline md_iterator md_begin() {
+				return md_list.begin();
+			}
+
+			inline md_iterator md_end() {
+				return md_list.end();
+			}
+
+			inline iterator_range<md_iterator> metadata() {
+				return make_range(md_begin(), md_end());
+			}
+
+			// kernel iterators
+			inline func_iterator kernel_begin() {
+				return kernel_list.begin();
+			}
+
+			inline func_iterator kernel_end() {
+				return kernel_list.end();
+			}
+
+			inline iterator_range<func_iterator> kernels() {
+				return make_range(kernel_begin(), kernel_end());
+			}
+
+			/**
+			 * @brief add kernel function as an entry
+			 * 
+			 * @param offload Offloading function corresponding to the target region
+			 * @param kernel Outlined function for the kernel
+			 */
+			void add_kernel(Function *offload, Function *kernel) {
+				kernel_list.emplace_back(kernel);
+				offload_func_list.emplace_back(offload);
+			}
+
+			/**
+			 * @brief Get the Offload Function pointer from the kernel function
+			 * 
+			 * @param kernel kernel function
+			 * @return Function* the offloading function
+			 */
+			Function* getOffloadFunction(Function *kernel) {
+				auto kernel_it = kernel_begin();
+				auto offload_it = offload_func_list.begin(); 
+				for (;kernel_it != kernel_end(); kernel_it++, offload_it++) {
+					if (kernel == *kernel_it) return *offload_it;
+				}
+				return nullptr;
+			}
+
+			/**
+			 * @brief get metadata about the kernel function 
+			 * 
+			 * @param offload offloading function
+			 * @return md_iterator an iterator for the metadata set
+			 */
+			md_iterator getMetadata(Function *offload);
+
+			/**
+			 * @brief parse metadata from Module and save it
+			 * 
+			 * @param M Module
+			 * 
+			 * @remarks If there is no metadata "omp_offload.info", it poses an error and finish the process
+			 */
+			void setOffloadMetadata(Module &M);
+
+			/**
+			 * @brief get the line number where the kernel starts
+			 * 
+			 * @param kernel kernel function
+			 * @return int line number
+			 */
+			int getKernelLine(Function *kernel);
+		private:
+			MetadataList md_list;
+			FunctionList kernel_list;
+			FunctionList offload_func_list;
+
+	};
+
+	/**
 	 * @class OmpKernelAnalysisPass
 	 * @brief A module pass to find functions annotated as OpenMP kernels
 	*/
 	class OmpKernelAnalysisPass :
 			public AnalysisInfoMixin<OmpKernelAnalysisPass> {
 		public:
-			using Result = StringMap<Function*>;
+			using Result = OmpKernelInfo;
 			Result run(Module &M, ModuleAnalysisManager &AM);
 		private:
 			friend AnalysisInfoMixin<OmpKernelAnalysisPass>;
 			static AnalysisKey Key;
+			
+			
 	};
 
 	/**

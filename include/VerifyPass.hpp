@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 11-02-2022 00:49:03
+*    Last Modified: 14-02-2022 14:06:01
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -47,6 +47,8 @@
 #include "DecoupledAnalysis.hpp"
 #include "CGRAModel.hpp"
 
+#include <map>
+
 using namespace llvm;
 
 
@@ -57,7 +59,13 @@ namespace CGRAOmp {
 	 * @brief Kind of verification
 	 */
 	enum class VerificationKind {
+		///Summary of the verfication for a function including kernels
+		FunctionSummary,
+		/// Summary of the loop verification
+		KernelSummary,
 		// Loop structure
+		/// Checking the instructions needed in the kernel are supported or not
+		InstAvailability,
 		/// Checking the kernel exceeds the maximumn nested level
 		MaxNestedLevel,
 		/// Checking each memory access meets the allowed access pattern
@@ -86,7 +94,10 @@ namespace CGRAOmp {
 			/**
 			 * @brief Construct a new Verify Result Base object
 			 */
-			VerifyResultBase() {};
+			explicit VerifyResultBase(VerificationKind kind) : kind(kind) {};
+
+			/// default constructor
+			VerifyResultBase() = delete;
 
 			/**
 			 * @brief explicit cast operator for Boolean
@@ -100,30 +111,39 @@ namespace CGRAOmp {
 			}
 
 
-		// interface to print messages
-		/**
-		 * @brief An abstract method to print the verification result
-		 * 
-		 * @param OS an output stream
-		 */
-		virtual void print(raw_ostream &OS) const = 0;
-		/**
-		 * @brief dump the verification result like as debugging in LLVM
-		 */
-		void dump() { this->print(dbgs()); }
-		/**
-		 * @brief support << operator to show the verification result
-		 */
-		friend raw_ostream& operator<<(raw_ostream& OS, 
-										const VerifyResultBase &v) {
-			v.print(OS);
-			return OS;
-		}
+			// interface to print messages
+			/**
+			 * @brief An abstract method to print the verification result
+			 * 
+			 * @param OS an output stream
+			 */
+			virtual void print(raw_ostream &OS) const = 0;
+			/**
+			 * @brief dump the verification result like as debugging in LLVM
+			 */
+			void dump() { this->print(dbgs()); }
+			/**
+			 * @brief support << operator to show the verification result
+			 */
+			friend raw_ostream& operator<<(raw_ostream& OS, 
+											const VerifyResultBase &v) {
+				v.print(OS);
+				return OS;
+			}
 
-		/**
-		 * @brief mark this result as violated
-		 */
-		void setVio() { isViolate = true; }
+			/**
+			 * @brief mark this result as violated
+			 */
+			void setVio() { isViolate = true; }
+
+			/**
+			 * @brief get the kind of derived class
+			 * @return VerificationKind 
+			 */
+			VerificationKind getKind() const {
+				return kind;
+			}
+
 		protected:
 			/**
 			 * @brief An actual impelementation for casting to Boolean
@@ -133,11 +153,52 @@ namespace CGRAOmp {
 			}
 			bool isViolate = false;
 
+
+		private:
+			VerificationKind kind;
+	};
+
+
+	/**
+	 * @class LoopVerifyResult
+	 * @brief A derived class from VerifyResultBase bundling detailed results for each verification type
+	*/
+	class LoopVerifyResult : public VerifyResultBase {
+
+		public:
+			/**
+			 * @brief Construct a new Verify Result object
+			 */
+			LoopVerifyResult() : VerifyResultBase(VerificationKind::KernelSummary) {}
+			void print(raw_ostream &OS) const override;
+
+			static bool classof(const VerifyResultBase* R) {
+				return R->getKind() == VerificationKind::KernelSummary;
+			}
+
+			/**
+			 * @brief Set the verification result for a kind of rule
+			 * @param R the reuslt
+			 */
+			void setResult(VerifyResultBase *R) {
+				each_result[static_cast<int>(R->getKind())] = R;
+			}
+
+		private:
+			DenseMap<int, VerifyResultBase*> each_result;
+
+			/**
+			 * @brief bool_operator
+			 * 
+			 * @return true if there is no violation in bundled results
+			 * @return false if there is some violation in a kind of rule
+			 */
+			bool bool_operator_impl() override;
 	};
 
 	/**
 	 * @class VerifyResult
-	 * @brief A derived class from VerifyResultBase bundling detailed results for each verification type
+	 * @brief A derived class from VerifyResultBase bunding all kernel verification result
 	*/
 	class VerifyResult : public VerifyResultBase {
 		private:
@@ -147,15 +208,19 @@ namespace CGRAOmp {
 			using KernelList = SmallVector<Loop*>;
 			using kernel_iterator = KernelList::iterator;
 
-			VerifyResult() : VerifyResultBase() {}
+			/**
+			 * @brief Construct a new Verify Result object
+			 */
+			VerifyResult() : VerifyResultBase(VerificationKind::FunctionSummary) {}
 			void print(raw_ostream &OS) const override;
 
 			/**
 			 * @brief register a valid loop kernel for the target CGRA
 			 * @param L Loop
 			 */
-			void registerKernel(Loop *L) {
+			void registerKernel(Loop *L, LoopVerifyResult LVR) {
 				valid_kernels.push_back(L);
+				loop_verify_results[L] = LVR;
 			}
 
 			inline kernel_iterator kernel_begin() {
@@ -168,27 +233,35 @@ namespace CGRAOmp {
 			inline iterator_range<kernel_iterator> kernels() {
 				return make_range(kernel_begin(), kernel_end());
 			}
+			static bool classof(const VerifyResultBase* R) {
+				return R->getKind() == VerificationKind::FunctionSummary;
+			}
 
 
 		private:
-			friend VerifyPass;
-			DenseMap<int, VerifyResultBase*> each_result;
+			std::map<Loop*, LoopVerifyResult> loop_verify_results;
+	};
 
-			/**
-			 * @brief Set the verification result for a kind of rule
-			 * @param kind verified kind
-			 * @param R the reuslt
-			 */
-			void setResult(VerificationKind kind, VerifyResultBase *R) {
-				each_result[static_cast<int>(kind)] = R;
+	/**
+	 * @brief Simple verification result only with a verification message
+	 * 
+	 * @tparam Kind Verification Kind
+	 */
+	template<VerificationKind Kind>
+	class SimpleVerifyResult : public VerifyResultBase {
+		public:
+			SimpleVerifyResult() : SimpleVerifyResult(std::string()) {}
+			SimpleVerifyResult(std::string msg) : VerifyResultBase(Kind),
+				msg(msg) {};
+
+			void setMessage(StringRef msg) {
+				msg = msg.str();
 			}
-			/**
-			 * @brief bool_operator
-			 * 
-			 * @return true if there is no violation in bundled results
-			 * @return false if there is some violation in a kind of rule
-			 */
-			bool bool_operator_impl() override;
+			void print(raw_ostream &OS) const {
+				OS << msg;
+			}
+		private:
+			std::string msg;
 	};
 
 	/**
@@ -200,6 +273,7 @@ namespace CGRAOmp {
 	class VerifyPassBase : public AnalysisInfoMixin<DerivedT> {
 		public:
 			using LoopList = SmallVector<Loop*>;
+			// using InstList = SmallVector<Instruction*>;
 		protected:
 
 			/**
@@ -213,6 +287,42 @@ namespace CGRAOmp {
 			 */
 			LoopList findPerfectlyNestedLoop(Function &F,
 				LoopStandardAnalysisResults &AR);
+
+			// /**
+			//  * @brief default routine to vefity whether the kernel contains unspported instructions
+			//  * 
+			//  * @param L Loop
+			//  * @param AM LoopAnalysisManager
+			//  * @param AR LoopStandardAnalysisResults
+			//  * @return Optional<InstList> if any unsupported instructions are included, it returns a list of them, otherwise None.
+			//  */
+			// Optional<InstList>
+			// verifyUnsupportedInst(Loop& L, LoopAnalysisManager &AM,
+			// 					LoopStandardAnalysisResults &AR)
+			// {
+			// 	auto LN = LoopNest::getLoopNest(L, AR.SE);
+			// 	auto innermost = LN->getInnermostLoop();
+
+			// 	auto &MM = AM.getResult<ModelManagerLoopProxy>(L, AR);
+			// 	auto *model = MM.getModel();
+
+			// 	InstList unsupported;
+
+			// 	for (auto &BB : innermost->getBlocks()) {
+			// 		for (auto &I : *BB) {
+			// 			auto *imap = model->isSupported(&I);
+			// 			if (!imap) {
+			// 				unsupported.emplace_back(&I);
+			// 			}
+			// 		}
+			// 	}
+			// 	if (unsupported.size() > 0) {
+			// 		return None;
+			// 	} else {
+			// 		return Optional<InstList>(std::move(unsupported));
+			// 	}
+			// }	
+
 	};
 
 	/**
@@ -250,13 +360,120 @@ namespace CGRAOmp {
 	};
 
 	/**
+	 * @class  VerifyInstAvailabilityPass
+	 * @brief A template class for verify the instruction availability
+	 * It is possible to customize the routine with specilization
+	 * 
+	 * @tparam  VerifyPassTy Type of verification e.g., DecoupleVerifyPass
+	 */
+	template <typename VerifyPassTy>
+	class VerifyInstAvailabilityPass : 
+				public AnalysisInfoMixin<VerifyInstAvailabilityPass<VerifyPassTy>> {
+		public:
+			using Result = SimpleVerifyResult<VerificationKind::InstAvailability>;
+
+			Result run(Loop &L, LoopAnalysisManager &AM,
+						LoopStandardAnalysisResults &AR) {
+
+				auto unsupported_insts = checkUnsupportedInst(L, AM, AR);
+				if (unsupported_insts.hasValue()) {
+					// Invalid
+					SmallSet<StringRef, 32> opcodes;
+					for (auto inst : *unsupported_insts) {
+						opcodes.insert(inst->getOpcodeName());
+					}
+					std::string msg = "Unsupported instructions: ";
+					for (auto opcode_name : opcodes) {
+						msg += opcode_name.str() + " ";
+					}
+					auto R = SimpleVerifyResult<VerificationKind::InstAvailability>(msg);
+					R.setVio();
+					return R;
+				} else {
+					auto R = SimpleVerifyResult<VerificationKind::InstAvailability>();
+					return R;
+				}
+			};
+
+		private:
+			friend AnalysisInfoMixin<VerifyInstAvailabilityPass<VerifyPassTy>>;
+			static AnalysisKey Key;
+			using InstList = SmallVector<Instruction*>;
+
+			/**
+			 * @brief default routine to check whether the kernel contains unspported instructions
+			 * 
+			 * @param L Loop
+			 * @param AM LoopAnalysisManager
+			 * @param AR LoopStandardAnalysisResults
+			 * @return Optional<InstList> if any unsupported instructions are included, it returns a list of them, otherwise None.
+			 * 
+			 * @remark Please specilize this method depending on the  target CGRA type
+			 */
+			Optional<InstList>
+			checkUnsupportedInst(Loop& L, LoopAnalysisManager &AM,
+								LoopStandardAnalysisResults &AR)
+			{
+				auto LN = LoopNest::getLoopNest(L, AR.SE);
+				auto innermost = LN->getInnermostLoop();
+
+				auto &MM = AM.getResult<ModelManagerLoopProxy>(L, AR);
+				auto *model = MM.getModel();
+
+				InstList unsupported;
+
+				for (auto &BB : innermost->getBlocks()) {
+					for (auto &I : *BB) {
+						auto *imap = model->isSupported(&I);
+						if (!imap) {
+							unsupported.emplace_back(&I);
+						}
+					}
+				}
+				if (unsupported.size() == 0) {
+					return None;
+				} else {
+					return Optional<InstList>(std::move(unsupported));
+				}
+			}	
+
+	};
+
+	template <typename VerifyPassTy>
+	AnalysisKey VerifyInstAvailabilityPass<VerifyPassTy>::Key;
+
+
+	/**
 	 * @class AGCompatibility
 	 * @brief A derived class from VerifyResultBase describing whether the memory access pattern is compatible with the AGs or not
 	*/
 	class AGCompatibility : public VerifyResultBase {
 		public:
+			/**
+			 * @brief Construct a new AGCompatibility object
+			 * 
+			 * @param kind type of the address generator
+			 */
+			explicit AGCompatibility(AddressGenerator::Kind kind) : kind(kind),
+				VerifyResultBase(VerificationKind::MemoryAccess) {};
+			
+
+			static bool classof(const VerifyResultBase* R) {
+				return R->getKind() == VerificationKind::MemoryAccess;
+			}
 
 			void print(raw_ostream &OS) const override {}
+
+			/**
+			 * @brief Get the Kind object
+			 * @return AddressGenerator::Kind 
+			 */
+			AddressGenerator::Kind getKind() const {
+				return kind;
+			}
+		private:
+			AddressGenerator::Kind kind;
+
 	};
 
 	/**
@@ -265,6 +482,9 @@ namespace CGRAOmp {
 	*/
 	class AffineAGCompatibility : public AGCompatibility {
 		public:
+			AffineAGCompatibility() : AGCompatibility(AddressGenerator::Kind::Affine)
+			{};
+
 			/**
 			 * @brief a configration of loop control for a dimention
 			 */
@@ -275,6 +495,9 @@ namespace CGRAOmp {
 				int64_t end;
 			} config_t;
 
+			static bool classof(const AGCompatibility* R) {
+				return R->getKind() == AddressGenerator::Kind::Affine;
+			}
 		private:
 
 	};
@@ -292,6 +515,7 @@ namespace CGRAOmp {
 						LoopStandardAnalysisResults &AR);
 		private:
 			friend AnalysisInfoMixin<VerifyAffineAGCompatiblePass>;
+			friend DecoupledVerifyPass;
 			static AnalysisKey Key;
 			DecoupledCGRA *dec_model;
 
@@ -332,6 +556,9 @@ namespace CGRAOmp {
 								FunctionAnalysisManager &AM);
 
 	CGRAModel* getModelFromLoop(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR);
+
+
+
 
 }
 

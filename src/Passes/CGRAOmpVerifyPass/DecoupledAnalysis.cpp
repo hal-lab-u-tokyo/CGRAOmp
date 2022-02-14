@@ -25,24 +25,32 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 11:38:23
-*    Last Modified: 14-12-2021 15:34:47
+*    Last Modified: 13-02-2022 09:42:16
 */
 
 #include "llvm/Analysis/LoopNestAnalysis.h"
+#include "llvm/ADT/SetOperations.h"
 
 #include "DecoupledAnalysis.hpp"
 #include "CGRAOmpPass.hpp"
+
+#include <queue>
 
 using namespace llvm;
 using namespace CGRAOmp;
 
 #define DEBUG_TYPE "cgraomp"
+static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
-/* ================= Implementation of DecoupledAnalysis ================= */
 
 /* ================= Implementation of DecoupledAnalysisPass ================= */
 AnalysisKey DecoupledAnalysisPass::Key;
 
+/**
+ * @details 
+ * Analyzed Loop @em L must be perfectly nested, i.e., memory access exist only in the inner most loop.
+ *
+*/
 DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisManager &AM,
 								LoopStandardAnalysisResults &AR)
 {
@@ -56,30 +64,110 @@ DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisMa
 	// get innermost loop
 	auto LN = LoopNest::getLoopNest(L, AR.SE);
 	auto innermost = LN->getInnermostLoop();
-	auto preheader = innermost->getLoopPreheader();
 	assert(innermost && "Innermost loop is not found");
 
-	SmallVector<LoadInst*> mem_load;
-	SmallVector<StoreInst*> mem_store;
+	SmallPtrSet<LoadInst*, 32> mem_load;
+	SmallPtrSet<StoreInst*, 32> mem_store;
 
 	// search for memory access for computation
 	for (auto &BB : innermost->getBlocks()) {
 		for (auto &I : *BB) {
 			if (auto ld = dyn_cast<LoadInst>(&I)) {
 				if (!SI->contains(ld->getOperand(0)) && !isPointerValue(ld)) {
-					mem_load.push_back(ld);
+					mem_load.insert(ld);
 				} // otherwise, it is an information about loop scheduling
 				  // thus, it must not be treated as input data for data flow
 			} else if (auto st = dyn_cast<StoreInst>(&I)) {
-				mem_store.push_back(st);
+				mem_store.insert(st);
 			}
 		}
 	}
 
+	// fifo for breath first search
+	std::queue<User*> fifo;
+	SmallPtrSet<User*, 32> traversed;
+
+	//push all mem load inst
+	for (User *v : mem_load) {
+		fifo.push(v);
+	}
+	
+	//breadth first search from memory load to store
+	while (!fifo.empty()) {
+		User *v = fifo.front();
+		fifo.pop();
+		// store means the end of data-flow so not traverse any more
+		if (!mem_store.contains(dyn_cast<StoreInst>(v))) {
+			// queue all successors
+			for (auto *suc : v->users()) {
+				if (isa<LoadInst>(*suc)) {
+					// impossible to decouple
+					result.setError("Loop dependent mem loads are included");
+					return result;
+				}
+				if (!traversed.contains(suc)) {
+					fifo.push(suc);
+					traversed.insert(suc);
+				}
+			}
+		}
+	}
+
+	SmallPtrSet<User*, 32> reached(traversed);
+	// for set operations
+	SmallPtrSet<User*, 32> stores(mem_store.begin(), mem_store.end());
+
+	set_intersect(reached, stores);
+	set_subtract(traversed, stores);
+
+	// check all memory stores are reachable
+	if (reached.size() < stores.size()) {
+		result.setError("Unreachable store exists");
+		return result;
+	}
+
+	SmallVector<Value*> comp(traversed.begin(), traversed.end());
+
+	// // tracking in-comming edge
+	// for (auto *user : traversed) {
+	// 	int last_operand = user->getNumOperands();
+	// 	// the last operand of store is destination
+	// 	// the last operand of callinst is function, so skip it for tracking
+	// 	if (isa<StoreInst>(*user) || isa<CallInst>(*user)) {
+	// 		last_operand--;
+	// 	}
+
+	// 	for (int i = 0; i < last_operand; i++) {
+	// 		if (auto operand = dyn_cast<User>(user->getOperand(i))) {
+	// 			// if (traversed.contains(operand) || mem_load)) }
+
+	// 		} else {
+	// 			// not user type
+	// 			DEBUG_WITH_TYPE(VerboseDebug,
+	// 				dbgs() << DBG_DEBUG_PREFIX << "Source node of ";
+	// 				user->print(dbgs());
+	// 				dbgs() << " is not User type";
+	// 			);
+	// 		}
+	// 	}
+	// }
+
 	//save the momory access insts
-	result.setMemLoad(std::move(mem_load));
-	result.setMemStore(std::move(mem_store));
+	result.setMemLoad(DecoupledAnalysis::MemLoadList(mem_load.begin(), mem_load.end()));
+	result.setMemStore(DecoupledAnalysis::MemStoreList(mem_store.begin(), mem_store.end()));
+	result.setComp(std::move(comp));
 	return result;
+}
+
+void DecoupledAnalysisPass::traversal(SmallVector<LoadInst*> &LL,
+										 SmallVector<StoreInst*> &SL)
+{
+
+	SmallPtrSet<User*, 32> traversed;
+
+
+
+
 }
 
 bool DecoupledAnalysisPass::isPointerValue(LoadInst *I)

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:20:02
-*    Last Modified: 03-02-2022 16:58:49
+*    Last Modified: 14-02-2022 08:00:38
 */
 #ifndef OptionPlugin_H
 #define OptionPlugin_H
@@ -183,7 +183,14 @@ namespace CGRAOmp
 	/// path list to load user DFG pass libraries
 	extern cl::list<string> OptDFGPassPlugin;
 
+	/// prefix for dot file name
 	extern cl::opt<string> OptDFGFilePrefix;
+
+	/// consider loop invariant memory load as constant values for decoupled CGRAs
+	extern cl::opt<bool> OptLoopInvariantAsConstant;
+
+	/// simplify the file name of DFG
+	extern cl::opt<bool> OptUseSimpleDFGName;
 
 }
 
@@ -197,9 +204,9 @@ namespace cl {
 using namespace CGRAOmp;
 
 /// non-member operator overloading for OptionValue impelentation
-bool operator!=(const OptKeyValue &lhs, const OptKeyValue &rhs);
-/// non-member operator overloading for OptionValue impelentation
 bool operator==(const OptKeyValue &lhs, const OptKeyValue &rhs);
+/// non-member operator overloading for OptionValue impelentation
+bool operator!=(const OptKeyValue &lhs, const OptKeyValue &rhs);
 
 /// template specialization of OptionValue for OptKeyValue
 template <>

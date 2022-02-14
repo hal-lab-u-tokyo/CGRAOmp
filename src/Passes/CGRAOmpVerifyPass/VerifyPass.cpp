@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 11-02-2022 00:53:55
+*    Last Modified: 14-02-2022 14:12:25
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -58,15 +58,66 @@ using namespace CGRAOmp;
 
 static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
+/* ================= Implementation of VerifyInstAvailabilityPass ================= */
+
+// Specilization of checkUnsupportedInst method for DecoupledVerifyPass
+/**
+ * @details For decoupled CGRAs, it verifies only computational part of instructions.
+*/
+template<>
+Optional<SmallVector<Instruction*>> 
+VerifyInstAvailabilityPass<DecoupledVerifyPass>::checkUnsupportedInst(Loop& L, 
+								LoopAnalysisManager &AM,
+								LoopStandardAnalysisResults &AR)
+{
+
+	auto LN = LoopNest::getLoopNest(L, AR.SE);
+	auto innermost = LN->getInnermostLoop();
+
+	auto &MM = AM.getResult<ModelManagerLoopProxy>(L, AR);
+	auto *model = MM.getModel();
+
+	InstList unsupported;
+
+	auto DA = AM.getResult<DecoupledAnalysisPass>(L, AR);
+
+	for (Value *v : DA.get_comps()) {
+		if (auto *inst = dyn_cast<Instruction>(v)) {
+			auto *imap = model->isSupported(inst);
+			if (!imap) {
+				unsupported.emplace_back(inst);
+			}
+		} else {
+			LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << "unexpected IR ";
+						v->print(dbgs()));
+		}
+	}
+
+	if (unsupported.size() > 0) {
+		return Optional<InstList>(std::move(unsupported));
+	} else {
+		return None;
+	}
+}
+
+template<>
+AnalysisKey VerifyInstAvailabilityPass<DecoupledVerifyPass>::Key;
 
 /* ===================== Implementation of VerifyResult ===================== */
-
 void VerifyResult::print(raw_ostream &OS) const
 {
 	OS << "this is verifyResult\n";
 }
 
-bool VerifyResult::bool_operator_impl()
+
+/* ===================== Implementation of LoopVerifyResult ===================== */
+
+void LoopVerifyResult::print(raw_ostream &OS) const
+{
+	OS << "this is LoopverifyResult\n";
+}
+
+bool LoopVerifyResult::bool_operator_impl()
 {
 	isViolate = false;
 	// if at least one verification result is violation, it returns violation
@@ -134,6 +185,7 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		dbgs() << DBG_DEBUG_PREFIX << "The number of kernels " 
 			   << loop_kernels.size() << "\n");
 
+	// create adaptor depending on the model
 	std::function<AGCompatibility(Loop*)> ag_verify_adaptor;
 
 	switch (dec_model->getAG()->getKind()) {
@@ -147,18 +199,38 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 			break;
 	}
 
-	// verify each memory access
-
 	for (auto L : loop_kernels) {
-		auto compat = ag_verify_adaptor(L);
-		if (compat) {
-			result.registerKernel(L);
+		LoopVerifyResult lvr;
+
+		// verify decoupled result
+
+		// verify instruction compatibility
+		auto inst_avail = 
+			LPM.getResult<VerifyInstAvailabilityPass<DecoupledVerifyPass>>(*L, AR);
+		if (!inst_avail) {
+				LLVM_DEBUG(inst_avail.print(dbgs() << WARN_DEBUG_PREFIX);
+				dbgs() << "\n";	);
 		}
+		lvr.setResult(&inst_avail);
+
+		// verify inter-loop depedency
+
+		// verify conditional parts
+
+		// verify each memory access
+		auto ag_compat = ag_verify_adaptor(L);
+		if (lvr) {
+			result.registerKernel(L, lvr);
+		}
+
 	}
 
 	return result;
 }
 
+					
+
+/* ===================== Implementation of DecoupledVerifyPass ===================== */
 template <typename AGVerifyPassT>
 AGCompatibility& DecoupledVerifyPass::AG_verification(Loop &L, LoopAnalysisManager &AM,
 								LoopStandardAnalysisResults &AR)
@@ -219,6 +291,34 @@ SmallVector<Loop*> VerifyPassBase<DerivedT>::findPerfectlyNestedLoop(Function &F
 
 	return std::move(loop_kernels);
 }
+
+// template <typename DerivedT>
+// Optional<SmallVector<Instruction*>> VerifyPassBase<DerivedT>::checkInstCompatibility(Loop& L, LoopAnalysisManager &AM,
+// 								LoopStandardAnalysisResults &AR)
+// {
+// 	auto LN = LoopNest::getLoopNest(L, AR.SE);
+// 	auto innermost = LN->getInnermostLoop();
+
+// 	auto &MM = AM.getResult<ModelManagerLoopProxy>(L, AR);
+// 	auto *model = MM.getModel();
+
+// 	InstList unsupported;
+
+// 	for (auto &BB : innermost->getBlocks()) {
+// 		for (auto &I : *BB) {
+// 			auto *imap = model->isSupported(&I);
+// 			if (!imap) {
+// 				unsupported.emplace_back(&I);
+// 			}
+// 		}
+// 	}
+// 	if (unsupported.size() > 0) {
+// 		return None;
+// 	} else {
+// 		return Optional<InstList>(std::move(unsupported));
+// 	}
+// }								
+
 
 /* ============= Implementation of VerifyAffineAGCompatiblePass ============= */
 AnalysisKey VerifyAffineAGCompatiblePass::Key;
@@ -348,12 +448,11 @@ PreservedAnalyses VerifyModulePass::run(Module &M, ModuleAnalysisManager &AM)
 	auto model = MM.getModel();
 
 	// obtain OpenMP kernels
-	auto &kernels = AM.getResult<OmpKernelAnalysisPass>(M);
+	auto &kernel_info = AM.getResult<OmpKernelAnalysisPass>(M);
 
 	// verify each OpenMP kernel
-	for (auto &it : kernels) {
+	for (auto F : kernel_info.kernels()) {
 		//verify OpenMP target function
-		auto *F = it.second;
 		auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 		switch(model->getKind()) {
 			case CGRAModel::CGRACategory::Decoupled:

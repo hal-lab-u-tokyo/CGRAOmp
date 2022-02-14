@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 19-02-2022 16:18:19
+#   Last Modified: 14-02-2022 08:08:49
 ###
 
 from argparse import ArgumentParser
@@ -115,6 +115,8 @@ def parser():
                             help="The prefix used for the data flow graph name")
     argparser.add_argument("--visualize-dfg", action="store_true",
                             help="")
+    argparser.add_argument("--simplify-dfg-name", action="store_true",
+                            help="Use simplified file name for DFGs")
     # for other options
     argparser.add_argument("-Xcgraomp", dest="cgraomp_args", \
                             action="append", metavar="<arg>", \
@@ -167,6 +169,8 @@ def parseCGRAOmpArgs(args):
         options.append("-dfg-pass-pipeline=" + args.dfg_pass_pipeline)
     if args.dfg_file_prefix:
         options.append("-dfg-file-prefix=" + args.dfg_file_prefix)
+    if args.simplify_dfg_name:
+        options.append("--simplify-dfg-name")
 
     options.extend(args.cgraomp_args)
     return options

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 11:36:50
-*    Last Modified: 15-12-2021 11:16:16
+*    Last Modified: 11-02-2022 09:46:31
 */
 #ifndef DecoupledAnalysis_H
 #define DecoupledAnalysis_H
@@ -49,11 +49,15 @@ namespace CGRAOmp {
 			DecoupledAnalysis() {};
 			~DecoupledAnalysis() {};
 
+
 			using MemLoadList = SmallVector<LoadInst*>;
 			using MemStoreList = SmallVector<StoreInst*>;
+			using ValueList = SmallVector<Value*>;
 
 			using load_iterator = MemLoadList::iterator;
 			using store_iterator = MemStoreList::iterator;
+			using value_iterator = ValueList::iterator;
+
 
 			void setMemLoad(MemLoadList &&l) {
 				mem_load = l;
@@ -62,6 +66,37 @@ namespace CGRAOmp {
 			void setMemStore(MemStoreList &&l) {
 				mem_store = l;
 			}
+			void setComp(ValueList &&l) {
+				comp = l;
+			}
+			void setInvars(ValueList &&l) {
+				loop_invariant = l;
+			}
+
+			void setError(StringRef cause) {
+				err_cause = cause;
+				err = true;
+			}
+
+			void print(raw_ostream &OS) const {
+				if (!err) {
+					OS << "Success";
+				} else {
+					OS << "Error " << err_cause;
+				}
+			}
+
+			/**
+			 * @brief explicit cast operator for Boolean
+			 * 
+			 * @return true if decoupling success
+			 * @return false in the case of any error
+			 */
+			explicit operator bool() {
+				return !err;
+			}
+			
+			// load instrcution
 			inline load_iterator load_begin() {
 				return mem_load.begin();
 			}
@@ -71,6 +106,7 @@ namespace CGRAOmp {
 			inline iterator_range<load_iterator> loads() {
 				return make_range(load_begin(), load_end());
 			}
+			// store instruction
 			inline store_iterator store_begin() {
 				return mem_store.begin();
 			}
@@ -79,6 +115,26 @@ namespace CGRAOmp {
 			}
 			inline iterator_range<store_iterator> stores() {
 				return make_range(store_begin(), store_end());
+			}
+			// computation
+			inline value_iterator comp_begin() {
+				return comp.begin();
+			}
+			inline value_iterator comp_end() {
+				return comp.end();
+			}
+			inline iterator_range<value_iterator> comps() {
+				return make_range(comp_begin(), comp_end());
+			}
+			// loop invariant
+			inline value_iterator invars_begin() {
+				return loop_invariant.begin();
+			}
+			inline value_iterator invars_end() {
+				return loop_invariant.end();
+			}
+			inline iterator_range<value_iterator> invars() {
+				return make_range(invars_begin(), invars_end());
 			}
 
 			MemLoadList& get_loads() {
@@ -89,9 +145,22 @@ namespace CGRAOmp {
 				return mem_store;
 			}
 
+			ValueList& get_comps() {
+				return comp;
+			}
+			
+			ValueList& get_invars() {
+				return loop_invariant;
+			}
+
+
 		private:
 			MemLoadList mem_load;
 			MemStoreList mem_store;
+			ValueList comp;
+			ValueList loop_invariant;
+			StringRef err_cause;
+			bool err = false;
 
 	};
 
@@ -109,6 +178,8 @@ namespace CGRAOmp {
 			friend AnalysisInfoMixin<DecoupledAnalysisPass>;
 			static AnalysisKey Key;
 
+			void traversal(SmallVector<LoadInst*> &LL, SmallVector<StoreInst*> &SL);
+
 			/**
 			 * @brief check whether the instruction load the value of pointer instead of data
 			 * 
@@ -117,6 +188,17 @@ namespace CGRAOmp {
 			 * @return return: otherwise
 			 */
 			bool isPointerValue(LoadInst *I);
+
+			// /**
+			//  * @brief check if the instruction is memory access or not
+			//  * 
+			//  * @param I Instruction to be checked
+			//  * @return true if it is a memory access
+			//  * @return otherwise: false
+			//  */
+			// inline bool isMemAccess(Instruction &I) {
+			// 	return isa<LoadInst>(I) || isa<StoreInst>(I);
+			// }
 	};
 }
 

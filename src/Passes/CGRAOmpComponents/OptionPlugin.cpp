@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 10-02-2022 17:13:39
+*    Last Modified: 14-02-2022 08:01:42
 */
 
 #include "llvm/Support/CommandLine.h"
@@ -74,10 +74,18 @@ cl::list<string> CGRAOmp::OptDFGPassPipeline("dfg-pass-pipeline",
 
 cl::list<string> CGRAOmp::OptDFGPassPlugin("load-dfg-pass-plugin", 
 			cl::value_desc("<Path string>"),
-			cl::desc("Load DFG pass plugin"));
+			cl::desc("Load a DFG pass plugin"));
 
 cl::opt<string> CGRAOmp::OptDFGFilePrefix("dfg-file-prefix",
-			cl::value_desc("<string>"), cl::desc("The prefix used for the data flow graph name (default: <working_dir>/<Module Name>_<Function Name>_)"));
+			cl::value_desc("<string>"), cl::desc("The prefix used for the data flow graph name (default: <parent_dir_of_sources>/<Module Name>_<Function Name>_)"));
+
+cl::opt<bool> CGRAOmp::OptLoopInvariantAsConstant("invar-loads-as-const",
+			cl::init(false),
+			cl::desc("Consider loop invariant memory loads as constants when DFG extraction for Decoupled CGRAs"));
+
+cl::opt<bool> CGRAOmp::OptUseSimpleDFGName("simplify-dfg-name",
+			cl::init(false),
+			cl::desc("Simplify the file name for each DFG"));
 
 /**
  * @details It parses a string based on a regular expression
@@ -110,8 +118,10 @@ namespace cl {
 
 bool operator!=(const OptKeyValue &lhs, const OptKeyValue &rhs)
 {
-	return !(lhs == rhs);
+	return ((lhs.get_key() != rhs.get_key()) ||
+				(lhs.get_value() != rhs.get_value()));
 }
+
 bool operator==(const OptKeyValue &lhs, const OptKeyValue &rhs)
 {
 	return ((lhs.get_key() == rhs.get_key()) &&

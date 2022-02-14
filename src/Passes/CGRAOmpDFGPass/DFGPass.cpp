@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 11-02-2022 00:51:06
+*    Last Modified: 14-02-2022 12:00:43
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -179,12 +179,11 @@ PreservedAnalyses DFGPassHandler::run(Module &M, ModuleAnalysisManager &AM)
 	auto model = MM.getModel();
 
 	// obtain OpenMP kernels
-	auto &kernels = AM.getResult<OmpKernelAnalysisPass>(M);
+	auto &kernel_info = AM.getResult<OmpKernelAnalysisPass>(M);
 
 	// verify each OpenMP kernel
-	for (auto &it : kernels) {
+	for (auto F : kernel_info.kernels()) {
 		//verify OpenMP target function
-		auto *F = it.second;
 		auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 		switch(model->getKind()) {
 			case CGRAModel::CGRACategory::Decoupled:
@@ -207,7 +206,6 @@ bool DFGPassHandler::createDataFlowGraphsForAllKernels(Function &F, FunctionAnal
 	auto AR = getLSAR(F, AM);
 	auto &LAM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
 	for (auto L : verify_result.kernels()) {
-		// errs() << L->getName() << "\n";
 		createDataFlowGraph(F, *L, AM, LAM, AR);
 	}
 	return false;
@@ -222,6 +220,11 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	//get the CGRA model
 	auto &MM = FAM.getResult<ModelManagerFunctionProxy>(F);
 	auto *model = MM.getModel();
+
+	auto &MAMProxy = FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F);
+	auto &M = *(F.getParent());
+	auto *kernel_info = MAMProxy.getCachedResult<OmpKernelAnalysisPass>(M);
+	assert(kernel_info && "OmpKernelAnalysisiPass must be executed before DFGPass");
 
 	// ---------- test ----------
 	// CGRADFG G;
@@ -333,8 +336,8 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 				NewNode = G.addNode(*NewNode);
 				user_to_node[v] = NewNode;
 			} else {
-				inst->print(errs() << "LLVM instruction ");
-				errs() << " is not supported in the target CGRA\n";
+				// inst->print(errs() << "LLVM instruction ");
+				// errs() << " is not supported in the target CGRA\n";
 			}
 		} else {
 			LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << "unexpected IR ";
@@ -402,18 +405,29 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	// apply tree height reduction if needed
 	DPM->run(G, L, FAM, LAM, AR);
 
-	std::string fname;
-	if (OptDFGFilePrefix != "") {
-		fname = formatv("{0}_{1}_{2}.dot", OptDFGFilePrefix, F.getName(), L.getName());
+	// determine export name
+	std::string fname, label;
+	auto offload_func = kernel_info->getOffloadFunction(&F);
+	auto md = kernel_info->getMetadata(offload_func);
+	auto module_name = llvm::sys::path::stem(F.getParent()->getSourceFileName());
+
+	if (OptUseSimpleDFGName && md != kernel_info->md_end()) {
+		// use original function name instead of offloading function name
+		label = formatv("{0}_{1}", module_name, md->func_name);
 	} else {
-		auto module_name = llvm::sys::path::stem(F.getParent()->getSourceFileName());
+		label = formatv("{0}_{1}", module_name, offload_func->getName());
+	}
+
+	if (OptDFGFilePrefix != "") {
+		fname = formatv("{0}_{1}_{2}.dot", OptDFGFilePrefix, label, L.getName());
+	} else {
 		auto parent = llvm::sys::path::parent_path(F.getParent()->getSourceFileName());
 		if (parent == "") {
 			parent = ".";
 		}
-		fname = formatv("{0}/{1}_{2}_{3}.dot", parent, module_name,
-						 F.getName(), L.getName());
+		fname = formatv("{0}/{1}_{2}.dot", parent, label, L.getName());
 	}
+
 	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Saving DFG: " << fname << "\n");
 	Error E = G.saveAsDotGraph(fname);
 	if (E) {

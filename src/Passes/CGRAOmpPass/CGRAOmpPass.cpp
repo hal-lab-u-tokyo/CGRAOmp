@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 19-02-2022 14:01:48
+*    Last Modified: 14-02-2022 10:36:26
 */
 #include "common.hpp"
 #include "CGRAOmpPass.hpp"
@@ -41,6 +41,7 @@
 #include "llvm/Transforms/Utils/LCSSA.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "llvm/ADT/Statistic.h"
 
@@ -57,6 +58,8 @@ static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 // # of successfully exracted DFGs
 STATISTIC(num_dfg, "the number of extracted DFGs");
 
+
+/* ===================== Implementation of ModelManagerPass ===================== */
 AnalysisKey ModelManagerPass::Key;
 
 ModelManagerPass::Result
@@ -112,8 +115,97 @@ ModelManagerLoopProxy::run(Loop &L, LoopAnalysisManager &AM,
 }
 
 
-AnalysisKey OmpKernelAnalysisPass::Key;
+/* ===================== Implementation of OmpKernelInfo ===================== */
+template <typename IRUnitT, typename InvT>
+bool OmpKernelInfo::invalidate(IRUnitT &IR, const PreservedAnalyses &PA,
+								InvT &Inv)
+{
+	// always keeping this reuslt valid after creation
+	auto PAC = PA.getChecker<OmpKernelAnalysisPass>();
+	return !PAC.preservedWhenStateless();
+}
 
+void OmpKernelInfo::setOffloadMetadata(Module &M)
+{
+	ExitOnError Exit(ERR_MSG_PREFIX);
+	error_code EC;
+	std::string buf;
+	raw_string_ostream OS(buf);
+
+	md_list.clear();
+
+	auto getMetadataInt = [&](Metadata* MD) -> int {
+		if (auto CM = dyn_cast<llvm::ConstantAsMetadata>(MD)){
+			if (auto *cint = dyn_cast<ConstantInt>(CM->getValue())) {
+				return cint->getSExtValue();
+			}
+		}
+		MD->print(OS);
+		Exit(make_error<StringError>(formatv("Fails to parse offload info. {0} is not interger", buf), EC));
+		return 0;
+	};
+
+	auto getMetadataStr = [&](Metadata* MD) -> StringRef {
+		if (auto MS = dyn_cast<llvm::MDString>(MD)){
+			return MS->getString();
+		}
+		MD->print(OS);
+		Exit(make_error<StringError>(formatv("Fails to parse offload info. {0} is not string", buf), EC));
+		return "";
+	};
+
+
+	if (auto offload_info = M.getNamedMetadata(OFFLOADINFO_METADATA_NAME)) {
+		for (auto entry : offload_info->operands()) {
+			if (entry->getNumOperands() == 6) {
+				md_list.emplace_back(OffloadMetadata_t {
+					getMetadataInt(entry->getOperand(0)),
+					getMetadataInt(entry->getOperand(1)),
+					getMetadataInt(entry->getOperand(2)),
+					getMetadataStr(entry->getOperand(3)),
+					getMetadataInt(entry->getOperand(4)),
+					getMetadataInt(entry->getOperand(5)),
+				});
+			} else {
+				entry->print(OS);
+				Exit(make_error<StringError>(formatv("Invalid offload info entry {0}", buf), EC));
+			}
+		}
+	} else {
+		Exit(make_error<StringError>("omp_offload.info is not found", EC));
+	}
+
+}
+
+OmpKernelInfo::md_iterator OmpKernelInfo::getMetadata(Function *offload)
+{
+	md_iterator it;
+	for (it = md_begin(); it != md_end(); it++) {
+		auto entry = *it;
+		if (formatv(OUTLINED_FUNC_NAME_FMT, 
+			entry.file_dev_ID, entry.file_ID, entry.func_name, entry.line).str()
+			== offload->getName().str()) {
+				return it;
+		}
+	}
+	DEBUG_WITH_TYPE(VerboseDebug,
+		dbgs() << formatv("{0}Metadata for {1} is not found\n",
+		DBG_DEBUG_PREFIX, offload->getName()));
+
+	return it;
+}
+
+int OmpKernelInfo::getKernelLine(Function *kernel) {
+	auto md = getMetadata(getOffloadFunction(kernel));
+	if (md != md_end()) {
+		return md->line;
+	} else {
+		return -1;
+	}
+}
+
+/* =================== Implementation of OmpKernelAnalysisPass =================== */
+AnalysisKey OmpKernelAnalysisPass::Key;
 /**
  * @details 
 **/
@@ -122,6 +214,9 @@ OmpKernelAnalysisPass::Result OmpKernelAnalysisPass::run(Module &M,
 {
 	using OpBitCast = ConcreteOperator<Operator, Instruction::BitCast>;
 	Result result;
+
+	result.setOffloadMetadata(M);
+
 	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Searching for OpenMP kernels\n");
 	for (auto &G : M.globals()) {
 		// find offloading.entry
@@ -148,7 +243,7 @@ OmpKernelAnalysisPass::Result OmpKernelAnalysisPass::run(Module &M,
 								if (auto micro_task = dyn_cast<Function>(
 									bitcast_inst->getOperand(0)
 								)) {
-									result[kernel_func->getName()] = micro_task;
+									result.add_kernel(kernel_func, micro_task);
 								}
 							} else {
 								LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX 
@@ -160,14 +255,15 @@ OmpKernelAnalysisPass::Result OmpKernelAnalysisPass::run(Module &M,
 			}
 		}
 	}
-	for (auto &F : M) {
-		if (F.getName().startswith("__nv_MAIN__F")) {
-			result[F.getName()] = &F;
-		}
-	}
+	// for (auto &F : M) {
+	// 	if (F.getName().startswith("__nv_MAIN__F")) {
+	// 		result[F.getName()] = &F;
+	// 	}
+	// }
 	return result;
 }
 
+/* ===================== Implementation of OmpScheduleInfo ===================== */
 bool OmpScheduleInfo::invalidate(Function &F, const PreservedAnalyses &PA,
 								FunctionAnalysisManager::Invalidator &Inv)
 {
@@ -176,6 +272,7 @@ bool OmpScheduleInfo::invalidate(Function &F, const PreservedAnalyses &PA,
 }
 
 
+/* ================ Implementation of OmpStaticShecudleAnalysis ================= */
 AnalysisKey OmpStaticShecudleAnalysis::Key;
 
 OmpStaticShecudleAnalysis::Result
@@ -289,3 +386,4 @@ llvmGetPassPluginInfo() {
 		}
 	};
 }
+
