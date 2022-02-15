@@ -1,7 +1,7 @@
 /*
 *    MIT License
 *    
-*    Copyright (c) 2021 Amano laboratory, Keio University & Processor Research Team, RIKEN Center for Computational Science
+*    Copyright (c) 2022 Amano laboratory, Keio University & Processor Research Team, RIKEN Center for Computational Science
 *    
 *    Permission is hereby granted, free of charge, to any person obtaining a copy of
 *    this software and associated documentation files (the "Software"), to deal in
@@ -21,47 +21,44 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /src/Passes/CGRAOmpVerifyPass/RegisterPass.cpp
+*    File:          /src/Passes/CGRAOmpVerifyPass/AGVerifyPass.cpp
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
-*    Created Date:  14-12-2021 12:39:40
-*    Last Modified: 15-02-2022 13:32:18
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
+*    Created Date:  15-02-2022 13:01:22
+*    Last Modified: 15-02-2022 13:31:08
 */
-#include "llvm/Passes/PassBuilder.h"
 
-#include "VerifyPass.hpp"
-#include "DecoupledAnalysis.hpp"
 #include "AGVerifyPass.hpp"
 
+using namespace llvm;
 using namespace CGRAOmp;
 
-// callback function to register passes
+#define DEBUG_TYPE "cgraomp"
 
-static void registerFunctionAnalyses(FunctionAnalysisManager &FAM)
+static const char *VerboseDebug = DEBUG_TYPE "-verbose";
+
+/* ============= Implementation of VerifyAGCompatiblePass ============= */
+
+template <>
+VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::Result
+VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::run_impl(Loop &L,
+	LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR)
 {
-#define FUNCTION_ANALYSIS(CREATE_PASS) \
-	FAM.registerPass([&] { return CREATE_PASS; });
+	AffineAGCompatibility result;
 
-#include "VerifyPasses.def"
+	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
+					<< "Verifying Affine AG compatibility of a loop: "
+					<< L.getName() << "\n");
 
+	// get decoupled memory access insts
+	auto DA = AM.getResult<DecoupledAnalysisPass>(L, AR);
+
+	// // load pattern
+	// check_all<0>(DA.get_loads(), AR.SE);
+	// // store pattern
+	// check_all<1>(DA.get_stores(), AR.SE);
+
+
+	return result;
 }
 
-static void registerLoopAnalyses(LoopAnalysisManager &LAM)
-{
-#define LOOP_ANALYSIS(CREATE_PASS) \
-	LAM.registerPass([&] { return CREATE_PASS; });
-
-#include "VerifyPasses.def"
-
-}
-
-static void registerVerifyPasses(PassBuilder &PB)
-{
-	PB.registerAnalysisRegistrationCallback(registerFunctionAnalyses);
-	PB.registerAnalysisRegistrationCallback(registerLoopAnalyses);
-}
-
-extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
-llvmGetPassPluginInfo() {
-	return {LLVM_PLUGIN_API_VERSION, "CGRAOmp", LLVM_VERSION_STRING, registerVerifyPasses};
-}

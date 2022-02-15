@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 14-02-2022 15:29:55
+*    Last Modified: 15-02-2022 13:28:17
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -304,7 +304,6 @@ namespace CGRAOmp {
 
 	};
 
-	// class AGCompatibility;
 
 	/**
 	 * @class DecoupledVerifyPass
@@ -319,9 +318,7 @@ namespace CGRAOmp {
 			friend AnalysisInfoMixin<DecoupledVerifyPass>;
 			static AnalysisKey Key;
 
-			// template <typename AGVerifyPassT>
-			// AGCompatibility& AG_verification(Loop &L, LoopAnalysisManager &AM,
-			// 					LoopStandardAnalysisResults &AR);
+
 	};
 
 	/**
@@ -413,129 +410,6 @@ namespace CGRAOmp {
 	template <typename VerifyPassTy>
 	AnalysisKey VerifyInstAvailabilityPass<VerifyPassTy>::Key;
 
-
-	/**
-	 * @class AGCompatibility
-	 * @brief A derived class from VerifyResultBase describing whether the memory access pattern is compatible with the AGs or not
-	 * 
-	 * @tparam kind Kind of AddressGenerator
-	*/
-	template<AddressGenerator::Kind AGKind>
-	class AGCompatibility : public VerifyResultBase {
-		public:
-			/**
-			 * @brief Construct a new AGCompatibility object
-			 */
-			AGCompatibility() : ag_kind(AGKind),
-				VerifyResultBase(VerificationKind::MemoryAccess) {};
-			
-
-			static bool classof(const VerifyResultBase* R) {
-				return R->getKind() == VerificationKind::MemoryAccess;
-			}
-
-			void print(raw_ostream &OS) const override {}
-
-			/**
-			 * @brief Get the Kind object
-			 * @return AddressGenerator::Kind 
-			 */
-			AddressGenerator::Kind geAGtKind() const {
-				return ag_kind;
-			}
-		private:
-			AddressGenerator::Kind ag_kind;
-
-	};
-
-	/**
-	 * @class AffineAGCompatibility
-	 * @brief A derived class from AGCompatibility for affine AGs
-	*/
-	class AffineAGCompatibility : public AGCompatibility<AddressGenerator::Kind::Affine> {
-		public:
-			AffineAGCompatibility() : AGCompatibility()
-			{};
-
-			/**
-			 * @brief a configration of loop control for a dimention
-			 */
-			typedef struct {
-				bool valid;
-				int64_t start;
-				int64_t inc;
-				int64_t end;
-			} config_t;
-
-			// for dyn_cast from VerifyResultBase pointer
-			static bool classof(const VerifyResultBase* R) {
-				if (auto ag_compat = dyn_cast<AGCompatibility<AddressGenerator::Kind::Affine>>(R)) {
-					return ag_compat->geAGtKind() == AddressGenerator::Kind::Affine;
-				}
-				return false;
-			}
-		private:
-
-	};
-
-	/**
-	 * @class VerifyAGCompatiblePass
-	 * @brief A function pass to verify the memory access pattern
-	 * 
-	 * @tparam Kind A Kind of Address Generator
-	 * 
-	 * @remarks This template needs specilization of @em run_impl method for each address generator type
-	*/
-	template <AddressGenerator::Kind Kind>
-	class VerifyAGCompatiblePass :
-		public AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>> {
-		public:
-			using Result = AGCompatibility<Kind>;
-
-			Result run(Loop &L, LoopAnalysisManager &AM,
-						LoopStandardAnalysisResults &AR) {
-				switch (Kind) {
-					case AddressGenerator::Kind::Affine:
-						return run_impl(L, AM, AR);
-					default:
-						llvm_unreachable("This type of AG is not implemented\n");
-				}
-			};
-		private:
-			friend AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>>;
-			friend DecoupledVerifyPass;
-			static AnalysisKey Key;
-			DecoupledCGRA *dec_model;
-
-
-			/**
-			 * @brief actual implementation of running pass
-			 * 
-			 * @param L Loop
-			 * @param AM LoopAnalysisManager
-			 * @param AR LoopStandardAnalysisResults
-			 * @return Result Derived class of the template AGCompatibility as an verificatio result
-			 */
-			Result run_impl(Loop &L, LoopAnalysisManager &AM,
-						LoopStandardAnalysisResults &AR);
-
-			/**
-			 * @brief parse the expression of addition between SCEVs
-			 * 
-			 * @param SAR parted expression
-			 * @param SE a result of ScalarEvolution for the function
-			 */
-			void parseSCEVAddRecExpr(const SCEVAddRecExpr *SAR,
-										ScalarEvolution &SE);
-			void parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth = 0);
-
-			// template<int N, typename T>
-			// bool check_all(SmallVector<T*> &list, ScalarEvolution &SE);
-
-	};
-
-	template <AddressGenerator::Kind Kind>
-	AnalysisKey VerifyAGCompatiblePass<Kind>::Key;
 
 	/**
 	 * @class VerifyModulePass

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 14-02-2022 15:30:22
+*    Last Modified: 15-02-2022 13:30:34
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -47,6 +47,7 @@
 #include "VerifyPass.hpp"
 #include "CGRAOmpAnnotationPass.hpp"
 #include "DecoupledAnalysis.hpp"
+#include "AGVerifyPass.hpp"
 
 #include <system_error>
 #include <functional>
@@ -223,16 +224,6 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 	return result;
 }
 
-					
-
-/* ===================== Implementation of DecoupledVerifyPass ===================== */
-// template <typename AGVerifyPassT>
-// AGCompatibility& DecoupledVerifyPass::AG_verification(Loop &L, LoopAnalysisManager &AM,
-// 								LoopStandardAnalysisResults &AR)
-// {
-// 	return AM.getResult<AGVerifyPassT>(L, AR);
-// 	//result.setResult(VerificationKind::MemoryAccess, &ag_compat);
-// }
 
 /* ================= Implementation of VerifyPassBase ================= */
 /**
@@ -286,32 +277,6 @@ SmallVector<Loop*> VerifyPassBase<DerivedT>::findPerfectlyNestedLoop(Function &F
 
 	return std::move(loop_kernels);
 }
-
-/* ============= Implementation of VerifyAGCompatiblePass ============= */
-
-template <>
-VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::Result
-VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::run_impl(Loop &L,
-	LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR)
-{
-	AffineAGCompatibility result;
-
-	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
-					<< "Verifying Affine AG compatibility of a loop: "
-					<< L.getName() << "\n");
-
-	// get decoupled memory access insts
-	auto DA = AM.getResult<DecoupledAnalysisPass>(L, AR);
-
-	// // load pattern
-	// check_all<0>(DA.get_loads(), AR.SE);
-	// // store pattern
-	// check_all<1>(DA.get_stores(), AR.SE);
-
-
-	return result;
-}
-
 
 
 /* ================== Implementation of VerifyModulePass ================== */
