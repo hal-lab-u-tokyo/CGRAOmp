@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:35:11
-*    Last Modified: 14-02-2022 11:05:34
+*    Last Modified: 15-02-2022 15:08:42
 */
 
 #ifndef CGRAInstMap_H
@@ -47,8 +47,6 @@
 
 #include <float.h>
 #include <math.h>
-
-#define WARN_MSG_PREFIX "\x1B[35m\033[1mWarning\033[0m: "
 
 #define CGRAOMP_CUSTOM_INST_ATTR "cgra_custom_inst"
 

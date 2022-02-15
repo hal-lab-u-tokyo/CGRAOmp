@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 11:38:23
-*    Last Modified: 13-02-2022 09:42:16
+*    Last Modified: 15-02-2022 16:34:28
 */
 
 #include "llvm/Analysis/LoopNestAnalysis.h"
@@ -54,6 +54,9 @@ AnalysisKey DecoupledAnalysisPass::Key;
 DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisManager &AM,
 								LoopStandardAnalysisResults &AR)
 {
+	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX 
+				<< "Start decoupling process for "
+					<< L.getName() << "\n");
 	Result result;
 	// get cached result
 	auto &FAMProxy = AM.getResult<FunctionAnalysisManagerLoopProxy>(L, AR);
@@ -68,10 +71,12 @@ DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisMa
 
 	SmallPtrSet<LoadInst*, 32> mem_load;
 	SmallPtrSet<StoreInst*, 32> mem_store;
+	SmallPtrSet<User*, 32> kernel_nodes;
 
 	// search for memory access for computation
 	for (auto &BB : innermost->getBlocks()) {
 		for (auto &I : *BB) {
+			kernel_nodes.insert(&I);
 			if (auto ld = dyn_cast<LoadInst>(&I)) {
 				if (!SI->contains(ld->getOperand(0)) && !isPointerValue(ld)) {
 					mem_load.insert(ld);
@@ -126,49 +131,74 @@ DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisMa
 		return result;
 	}
 
-	SmallVector<Value*> comp(traversed.begin(), traversed.end());
+	// a set of decoupled computation node
+	SmallVector<User*> comp(traversed.begin(), traversed.end());
+	SmallVector<Value*> invars;
 
-	// // tracking in-comming edge
-	// for (auto *user : traversed) {
-	// 	int last_operand = user->getNumOperands();
-	// 	// the last operand of store is destination
-	// 	// the last operand of callinst is function, so skip it for tracking
-	// 	if (isa<StoreInst>(*user) || isa<CallInst>(*user)) {
-	// 		last_operand--;
-	// 	}
+	// tracking in-comming edge
+	for (auto *user : traversed) {
+		int last_operand = user->getNumOperands();
+		// the last operand of store is destination
+		// the last operand of callinst is function, so skip it for tracking
+		if (isa<StoreInst>(*user) || isa<CallInst>(*user)) {
+			last_operand--;
+		}
 
-	// 	for (int i = 0; i < last_operand; i++) {
-	// 		if (auto operand = dyn_cast<User>(user->getOperand(i))) {
-	// 			// if (traversed.contains(operand) || mem_load)) }
-
-	// 		} else {
-	// 			// not user type
-	// 			DEBUG_WITH_TYPE(VerboseDebug,
-	// 				dbgs() << DBG_DEBUG_PREFIX << "Source node of ";
-	// 				user->print(dbgs());
-	// 				dbgs() << " is not User type";
-	// 			);
-	// 		}
-	// 	}
-	// }
+		for (int i = 0; i < last_operand; i++) {
+			if (auto operand = dyn_cast<User>(user->getOperand(i))) {
+				// check if it is first looked node
+				if (!traversed.contains(operand) &&
+						!mem_load.contains(dyn_cast<LoadInst>(operand))) {
+					// constant values
+					if (auto *c = dyn_cast<Constant>(operand)) {
+						invars.emplace_back(c);
+					} else {
+						// skip some node
+						Value* last = operand;
+						SmallVector<Value*> hist;
+						while (isa<TruncInst>(*last) || isa<BitCastInst>(*last)) {
+							if (auto next = dyn_cast<User>(last)->getOperand(0)) {
+								hist.emplace_back(last);
+								last = next;
+							} else {
+								break;
+							}
+						}
+						// check if it is defined outside the loop
+						if (!kernel_nodes.contains(dyn_cast<User>(last))) {
+							invars.emplace_back(last);
+							// save skip history
+							if (hist.size() > 0) {
+								result.setInvarSkipHistory(last, hist);
+							}
+						} else {
+							LLVM_DEBUG(
+								dbgs() << WARN_DEBUG_PREFIX  << "Unreachable nodes inside the kernel: ";
+								last->print(dbgs());
+								dbgs() << "\n";
+							);
+						}
+					}
+				}
+			} else {
+				// not user type
+				DEBUG_WITH_TYPE(VerboseDebug,
+					dbgs() << DBG_DEBUG_PREFIX << "Source node of ";
+					user->print(dbgs());
+					dbgs() << " is not User type";
+				);
+			}
+		}
+	}
 
 	//save the momory access insts
 	result.setMemLoad(DecoupledAnalysis::MemLoadList(mem_load.begin(), mem_load.end()));
 	result.setMemStore(DecoupledAnalysis::MemStoreList(mem_store.begin(), mem_store.end()));
 	result.setComp(std::move(comp));
+	result.setInvars(std::move(invars));
 	return result;
 }
 
-void DecoupledAnalysisPass::traversal(SmallVector<LoadInst*> &LL,
-										 SmallVector<StoreInst*> &SL)
-{
-
-	SmallPtrSet<User*, 32> traversed;
-
-
-
-
-}
 
 bool DecoupledAnalysisPass::isPointerValue(LoadInst *I)
 {

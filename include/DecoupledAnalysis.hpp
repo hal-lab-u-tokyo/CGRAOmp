@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 11:36:50
-*    Last Modified: 11-02-2022 09:46:31
+*    Last Modified: 15-02-2022 15:28:50
 */
 #ifndef DecoupledAnalysis_H
 #define DecoupledAnalysis_H
@@ -34,6 +34,8 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/DenseMap.h"
 
 using namespace llvm;
 
@@ -52,11 +54,13 @@ namespace CGRAOmp {
 
 			using MemLoadList = SmallVector<LoadInst*>;
 			using MemStoreList = SmallVector<StoreInst*>;
-			using ValueList = SmallVector<Value*>;
+			using CompList = SmallVector<User*>;
+			using InvarList = SmallVector<Value*>;
 
 			using load_iterator = MemLoadList::iterator;
 			using store_iterator = MemStoreList::iterator;
-			using value_iterator = ValueList::iterator;
+			using comp_iterator = CompList::iterator;
+			using invar_iterator = InvarList::iterator;
 
 
 			void setMemLoad(MemLoadList &&l) {
@@ -66,10 +70,10 @@ namespace CGRAOmp {
 			void setMemStore(MemStoreList &&l) {
 				mem_store = l;
 			}
-			void setComp(ValueList &&l) {
+			void setComp(CompList &&l) {
 				comp = l;
 			}
-			void setInvars(ValueList &&l) {
+			void setInvars(InvarList &&l) {
 				loop_invariant = l;
 			}
 
@@ -117,23 +121,23 @@ namespace CGRAOmp {
 				return make_range(store_begin(), store_end());
 			}
 			// computation
-			inline value_iterator comp_begin() {
+			inline comp_iterator comp_begin() {
 				return comp.begin();
 			}
-			inline value_iterator comp_end() {
+			inline comp_iterator comp_end() {
 				return comp.end();
 			}
-			inline iterator_range<value_iterator> comps() {
+			inline iterator_range<comp_iterator> comps() {
 				return make_range(comp_begin(), comp_end());
 			}
 			// loop invariant
-			inline value_iterator invars_begin() {
+			inline invar_iterator invars_begin() {
 				return loop_invariant.begin();
 			}
-			inline value_iterator invars_end() {
+			inline invar_iterator invars_end() {
 				return loop_invariant.end();
 			}
-			inline iterator_range<value_iterator> invars() {
+			inline iterator_range<invar_iterator> invars() {
 				return make_range(invars_begin(), invars_end());
 			}
 
@@ -145,21 +149,48 @@ namespace CGRAOmp {
 				return mem_store;
 			}
 
-			ValueList& get_comps() {
+			CompList& get_comps() {
 				return comp;
 			}
 			
-			ValueList& get_invars() {
+			InvarList& get_invars() {
 				return loop_invariant;
+			}
+
+			/**
+			 * @brief Set the node traversal skip history for loop invariant nodes
+			 * 
+			 * @param node the terminal node of loop invariant
+			 * @param hist history of skipped nodes
+			 */
+			void setInvarSkipHistory(Value* node, SmallVector<Value*> hist) {
+				invar_skip_hist[node] = hist;
+			}
+
+			/**
+			 * @brief get the node traversal skip history
+			 * 
+			 * @param node the terminal node of loop invariant
+			 * @return SmallVector<Value*>* a sequence of skipped node
+			 * if there is any skipped node. Otherwise it returns nullptr
+			 */
+			SmallVector<Value*>* getSkipHist(Value* node) {
+				if (invar_skip_hist.find(node) != invar_skip_hist.end()) {
+					return &(invar_skip_hist[node]);
+				} else {
+					return nullptr;
+				}
 			}
 
 
 		private:
 			MemLoadList mem_load;
 			MemStoreList mem_store;
-			ValueList comp;
-			ValueList loop_invariant;
+			CompList comp;
+			InvarList loop_invariant;
 			StringRef err_cause;
+			DenseMap<Value*, SmallVector<Value*>> invar_skip_hist;
+
 			bool err = false;
 
 	};

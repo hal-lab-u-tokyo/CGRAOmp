@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-02-2022 13:23:43
-*    Last Modified: 15-02-2022 13:38:39
+*    Last Modified: 15-02-2022 13:56:26
 */
 #ifndef AGVerifyPass_H
 #define AGVerifyPass_H
@@ -131,22 +131,6 @@ namespace CGRAOmp {
 		public:
 			using Result = AGCompatibility<Kind>;
 
-			Result run(Loop &L, LoopAnalysisManager &AM,
-						LoopStandardAnalysisResults &AR) {
-				switch (Kind) {
-					case AddressGenerator::Kind::Affine:
-						return run_impl(L, AM, AR);
-					default:
-						llvm_unreachable("This type of AG is not implemented\n");
-				}
-			};
-		private:
-			friend AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>>;
-			friend DecoupledVerifyPass;
-			static AnalysisKey Key;
-			DecoupledCGRA *dec_model;
-
-
 			/**
 			 * @brief actual implementation of running pass
 			 * 
@@ -155,8 +139,11 @@ namespace CGRAOmp {
 			 * @param AR LoopStandardAnalysisResults
 			 * @return Result Derived class of the template AGCompatibility as an verificatio result
 			 */
-			Result run_impl(Loop &L, LoopAnalysisManager &AM,
+			Result run(Loop &L, LoopAnalysisManager &AM,
 						LoopStandardAnalysisResults &AR);
+		private:
+			friend AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>>;
+			static AnalysisKey Key;
 
 			/**
 			 * @brief parse the expression of addition between SCEVs
@@ -168,8 +155,6 @@ namespace CGRAOmp {
 										ScalarEvolution &SE);
 			void parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth = 0);
 
-			// template<int N, typename T>
-			// bool check_all(SmallVector<T*> &list, ScalarEvolution &SE);
 
 	};
 

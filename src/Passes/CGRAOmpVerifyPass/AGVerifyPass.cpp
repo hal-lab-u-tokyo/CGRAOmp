@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-02-2022 13:01:22
-*    Last Modified: 15-02-2022 13:31:08
+*    Last Modified: 15-02-2022 13:41:30
 */
 
 #include "AGVerifyPass.hpp"
@@ -39,9 +39,10 @@ static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
 /* ============= Implementation of VerifyAGCompatiblePass ============= */
 
+// partial specilization for Affine AG
 template <>
 VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::Result
-VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::run_impl(Loop &L,
+VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::run(Loop &L,
 	LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR)
 {
 	AffineAGCompatibility result;

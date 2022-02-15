@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 14-02-2022 12:00:43
+*    Last Modified: 15-02-2022 16:49:11
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -48,6 +48,7 @@
 #include "VerifyPass.hpp"
 #include "CGRADataFlowGraph.hpp"
 #include "OptionPlugin.hpp"
+#include "DecoupledAnalysis.hpp"
 
 #include "BalanceTree.hpp"
 
@@ -206,11 +207,12 @@ bool DFGPassHandler::createDataFlowGraphsForAllKernels(Function &F, FunctionAnal
 	auto AR = getLSAR(F, AM);
 	auto &LAM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
 	for (auto L : verify_result.kernels()) {
-		createDataFlowGraph(F, *L, AM, LAM, AR);
+		createDataFlowGraph<VerifyPassT>(F, *L, AM, LAM, AR);
 	}
 	return false;
 }
 
+template<typename VerifyPassT>
 bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR)
@@ -226,176 +228,110 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	auto *kernel_info = MAMProxy.getCachedResult<OmpKernelAnalysisPass>(M);
 	assert(kernel_info && "OmpKernelAnalysisiPass must be executed before DFGPass");
 
-	// ---------- test ----------
-	// CGRADFG G;
-	// G.setName(L.getName().str());
-
-	// SmallPtrSet<Instruction*, 32> list;
-	// DenseMap<User*,DFGNode*> user_to_node;
-
-	// for (auto &BB : L.getBlocks()) {
-	// 	for (auto &I : *BB) {
-	// 		list.insert(&I);
-	// 		I.dump();
-	// 	}
-	// }
-
-	// errs() << "\n ---------- report ---------- \n";
-
-	// int count = 0;
-	// int edge_count = 0;
-	// int lc_edge = 0;
-	// int gep_edge = 0;
-	// int glb_count = 0;
-	// for (auto *I : list) {
-	// 	if (!isa<PHINode>(*I) && !isa<GetElementPtrInst>(*I) && 
-	// 		!isa<CmpInst>(*I) && !isa<BranchInst>(*I)) {
-	// 		for (int i = 0; i < I->getNumOperands(); i++) {
-	// 			auto operand = I->getOperand(i);
-	// 			if (!isa<Constant>(*operand)) {
-	// 				if (auto oi = dyn_cast<Instruction>(operand)) {
-	// 					if (!list.contains(oi)) {
-	// 						glb_count++;
-	// 					}
-	// 				}
-	// 				if (isa<PHINode>(*operand)) {
-	// 					lc_edge++;
-	// 				} else if (isa<GetElementPtrInst>(*operand)) {
-	// 					gep_edge++;
-	// 				} else {
-	// 					edge_count++;
-	// 				}
-	// 			}
-	// 		}
-	// 		I->print(errs());
-	// 		errs() << formatv(" --- {0} {1} {2} {3}\n", edge_count, lc_edge, gep_edge, glb_count);
-	// 		count++;
-	// 	}
-	// }
-	// errs() << "count " << count << formatv(" --- {0} {1} {2} {3}\n", edge_count, lc_edge, gep_edge, glb_count);
-	// errs() << "total node " << count + gep_edge << " " << edge_count + gep_edge * 2 << " " << lc_edge << "\n";
-	// for (auto *I : list) {
-	// 	if (isa<GetElementPtrInst>(*I)) {
-	// 		I->dump();
-	// 	}
-	// }
-
-	// ---------- end test ----------
-
-	// for (auto access : DA.loads()) {
-	// 	access->dump();
-	// }
-	// for (auto access : DA.stores()) {
-	// 	access->dump();
-	// }
-
-	SmallVector<Value*> NotReached(DA.stores());
-	SmallPtrSet<User*, 32> stores(DA.store_begin(), DA.store_end());
-	SmallPtrSet<User*, 32> traversed;
-	DenseMap<User*,DFGNode*> user_to_node;
+	DenseMap<Value*,DFGNode*> value_to_node;
 	SmallPtrSet<User*, 32> custom_op;
+	ValueMap<Value*, Value*> invars_tail;
 
-	std::queue<User*> fifo;
 	CGRADFG G;
-	G.setName(L.getName().str());
 
-	// push memory loads to fifo
-	// errs() << "Loads\n";
-	for (User *v : DA.loads()) {
-		fifo.push(v);
-		traversed.insert(v);
-		// v->dump();
+	// add memory load
+	for (auto inst : DA.get_loads()) {
+		auto NewNode = make_mem_node(*inst);
+		NewNode = G.addNode(*NewNode);
+		value_to_node[inst] = NewNode;
 	}
-	// errs() << "\n";
-	// traverse
-	// in this traversal, only instructions can appear
-	while (!fifo.empty()) {
-		User *v = fifo.front();
-		fifo.pop();
+	// add memory store
+	for (auto inst : DA.get_stores()) {
+		auto NewNode = make_mem_node(*inst);
+		NewNode = G.addNode(*NewNode);
+		value_to_node[inst] = NewNode;
+	}
 
-		if (auto *inst = dyn_cast<Instruction>(v)) {
+	// add comp node
+	for (auto user : DA.get_comps()) {
+		if (auto *inst = dyn_cast<Instruction>(user)) {
 			if (auto *imap = model->isSupported(inst)) {
 				if (auto binop = dyn_cast<BinaryOpMapEntry>(imap)) {
-					// Computational node
 					auto NewNode = make_comp_node(inst, imap->getMapName());
 					NewNode = G.addNode(*NewNode);
-					user_to_node[v] = NewNode;
-					// inst->print(errs());
-					// // errs() << " " << inst->hasAllowReassoc() << " "<< "\n";
-					// errs() << "\n";
+					value_to_node[inst] = NewNode;
 				} else if (auto customop = dyn_cast<CustomInstMapEntry>(imap)) {
-					// errs() << "custom\n";
 					auto NewNode = make_comp_node(inst, customop->getMapName());
 					NewNode = G.addNode(*NewNode);
-					user_to_node[v] = NewNode;
-					custom_op.insert(v);
+					value_to_node[inst] = NewNode;
+					custom_op.insert(inst);
 				}
-			} else if (isMemAccess(*inst)) {
-				// Memory access node
-				auto NewNode = make_mem_node(*inst);
-				NewNode = G.addNode(*NewNode);
-				user_to_node[v] = NewNode;
 			} else {
-				// inst->print(errs() << "LLVM instruction ");
-				// errs() << " is not supported in the target CGRA\n";
+				LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX 
+					<< "Unsupported instructions are included");
+				DEBUG_WITH_TYPE(VerboseDebug, 
+					inst->print(dbgs() << "\t");
+					dbgs() << "\n";
+				);
 			}
 		} else {
-			LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << "unexpected IR ";
-						v->print(dbgs()));
-		}
-		// store means the end of DFG so not traverse any more
-		if (!stores.contains(v)) {
-			for (auto *suc : v->users()) {
-				if (!traversed.contains(suc)) {
-					fifo.push(suc);
-					traversed.insert(suc);
-				}
-			}
+			LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX 
+				<< "computational part of decoupling result invalid");
+			DEBUG_WITH_TYPE(VerboseDebug, 
+				inst->print(dbgs() << "\t");
+				dbgs() << " is not instruction\n";
+			);
 		}
 	}
-	// search for constant value while analyzing edges
-	for (auto entry : make_range(user_to_node.begin(), user_to_node.end())) {
-		auto user = entry.first;
-		DFGNode *dst = entry.second;
-		int last_operand = user->getNumOperands();
-		if (custom_op.contains(user) || stores.contains(user)) {
-			last_operand--;
+
+	// add loop invariants as const nodes
+	for (auto val : DA.get_invars()) {
+		auto NewNode = make_const_node(val);
+		NewNode = G.addNode(*NewNode);
+		value_to_node[val] = NewNode;
+		// get node actually connected to comp or store node
+		if (auto skip_hist = DA.getSkipHist(val)) {
+			errs() << "skip history found for ";
+			val->dump();
+			for (auto hoge : *skip_hist) {
+				errs() << "\t";
+				hoge->dump();
+			}
+			invars_tail[skip_hist->front()] = val;
+		} else {
+			invars_tail[val] = val;
 		}
-		if (isa<LoadInst>(*user)) {
-			continue;
-		}
-		for (int i = 0; i < last_operand; i++) {
+	}
+
+	auto connect = [&](User *I, int num_operand) {
+		DFGNode *dst = value_to_node[I];
+		for (int i = 0; i < num_operand; i++) {
 			DFGNode* src = nullptr;
-			if (auto operand = dyn_cast<User>(user->getOperand(i))) {
-				if (user_to_node.find(operand) != user_to_node.end()) {
-					// DFG contains it
-					src = user_to_node[operand];
-				} else if (auto *c = dyn_cast<Constant>(operand)) {
-					// Constant value
-					src = make_const_node(c);
-					src = G.addNode(*src);
-				} else {
-					// data defined outside the loop
-					Value *last = operand;
-					while (isa<TruncInst>(*last) || isa<BitCastInst>(*last)) {
-						if (auto next = dyn_cast<User>(last)->getOperand(0)) {
-							last = next;
-						}
-					}
-					src = make_const_node(last);
-					src = G.addNode(*src);
-				}
-				if (src) {
-					auto NewEdge = new DFGEdge(*dst, i);
-					assert(G.connect(*src, *dst, *NewEdge) && "Trying to connect non-exist nodes");
-				}
+			auto operand = I->getOperand(i);
+			if (invars_tail.find(operand) != invars_tail.end()) {
+				src = value_to_node[invars_tail[operand]];
 			} else {
-				LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX;
-							user->getOperand(i)->print(dbgs() << " Non User type ");
-							user->print(dbgs() << " is an operand of "); dbgs() << "\n");
+				src = value_to_node[operand];
+			}
+			if (src) {
+				auto NewEdge = new DFGEdge(*dst, i);
+				assert(G.connect(*src, *dst, *NewEdge) && "Trying to connect non-exist nodes");
+			} else {
+				LLVM_DEBUG(
+					operand->print(dbgs() << ERR_DEBUG_PREFIX 
+					<< "graph node for ");
+					dbgs() << " is not created\n";
+				);
 			}
 		}
+	};
+	// add edges to comp node
+	for (auto inst : DA.get_comps()) {
+		int last_operand = inst->getNumOperands();
+		if (custom_op.contains(inst)) last_operand--;
+		connect(inst, last_operand);
 	}
+
+	// add edges to mem store node
+	for (auto inst : DA.get_stores()) {
+		connect(inst, inst->getNumOperands() - 1);
+	}
+
 
 	if (OptDFGPlainNodeName) {
 		G.makeSequentialNodeID();
@@ -427,6 +363,7 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		}
 		fname = formatv("{0}/{1}_{2}.dot", parent, label, L.getName());
 	}
+	G.setName(label);
 
 	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Saving DFG: " << fname << "\n");
 	Error E = G.saveAsDotGraph(fname);
@@ -434,11 +371,6 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		ExitOnError Exit(ERR_MSG_PREFIX);
 		Exit(std::move(E));
 	}
-
-	// for (auto *v : post_order(&G)) {
-	// 	errs() << v->getUniqueName() << "\n";
-	// }
-
 
 	return true;
 }

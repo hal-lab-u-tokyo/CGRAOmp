@@ -25,13 +25,15 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  31-01-2022 13:45:57
-*    Last Modified: 31-01-2022 16:35:44
+*    Last Modified: 15-02-2022 15:09:23
 */
 
 #ifndef CGRA_OMP_COMMON_H
 #define CGRA_OMP_COMMON_H
 
 #define ERR_MSG_PREFIX "CGRAOmpPass \x1B[31m\033[1mError\033[0m: "
+#define WARN_MSG_PREFIX "\x1B[35m\033[1mWarning\033[0m: "
+
 #define INFO_DEBUG_PREFIX "\t[INFO]: "
 #define WARN_DEBUG_PREFIX "\t[WARN]: "
 #define ERR_DEBUG_PREFIX "\t[ERROR]: "

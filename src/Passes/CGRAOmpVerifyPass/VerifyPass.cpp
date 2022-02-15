@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 15-02-2022 13:30:34
+*    Last Modified: 15-02-2022 15:27:05
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -191,6 +191,13 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		LoopVerifyResult lvr;
 
 		// verify decoupled result
+		auto DA = LPM.getResult<DecoupledAnalysisPass>(*L, AR);
+		std::string buf;
+		raw_string_ostream OS(buf);
+		DA.print(OS);
+		auto DAR = DecoupleAnalysisResult(buf);
+		lvr.setResult(&DAR);
+		
 
 		// verify instruction compatibility
 		auto inst_avail = 

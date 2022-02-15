@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 15-02-2022 13:28:17
+*    Last Modified: 15-02-2022 15:23:14
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -63,7 +63,8 @@ namespace CGRAOmp {
 		FunctionSummary,
 		/// Summary of the loop verification
 		KernelSummary,
-		// Loop structure
+		/// Checking the loop kernel is able to be decoupled
+		Decoupling,
 		/// Checking the instructions needed in the kernel are supported or not
 		InstAvailability,
 		/// Checking the kernel exceeds the maximumn nested level
@@ -263,6 +264,8 @@ namespace CGRAOmp {
 		private:
 			std::string msg;
 	};
+
+	using DecoupleAnalysisResult = SimpleVerifyResult<VerificationKind::Decoupling>;
 
 	/**
 	 * @class VerifyPassBase

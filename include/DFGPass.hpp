@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 09:59:52
-*    Last Modified: 11-02-2022 08:30:49
+*    Last Modified: 15-02-2022 15:48:15
 */
 #ifndef DFGPASS_H
 #define DFGPASS_H
@@ -223,6 +223,7 @@ namespace CGRAOmp {
 			 * @return true if generating a graph without errors
 			 * @return otherwise: false
 			 */
+			template<typename VerifyPassT>
 			bool createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager &FAM,
 										LoopAnalysisManager &LAM, 
 										LoopStandardAnalysisResults &AR);
