@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 14-02-2022 13:43:24
+*    Last Modified: 18-02-2022 04:16:25
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -237,15 +237,19 @@ namespace llvm {
 
 	class ConstantNode : public DFGNode {
 		public:
-			ConstantNode(Value *v) :
-				DFGNode(DFGNode::NodeKind::Constant, v) {}
+			using SkipSeq = SmallVector<Value*>;
+			explicit ConstantNode(Value *v) :
+				ConstantNode(v, nullptr) {};
+
+			// constructor used if it has skipped nodes
+			ConstantNode(Value *v, SkipSeq* seq) : 
+				DFGNode(DFGNode::NodeKind::Constant, v), skip_seq(seq) {};
 
 			string getUniqueName() const {
 				return "Const_" + to_string(getID());
 			}
-			string getNodeAttr() const {
-				return formatv("type=const,{0}", getConstStr());
-			}
+			string getNodeAttr() const;
+
 			string getExtraInfo() const {
 				return getConstStr();
 			}
@@ -289,6 +293,8 @@ namespace llvm {
 						return "unknown";
 				}
 			}
+
+			SkipSeq *skip_seq;
 	};
 
 

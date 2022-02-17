@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 11:38:23
-*    Last Modified: 17-02-2022 22:33:24
+*    Last Modified: 18-02-2022 04:19:17
 */
 
 #include "llvm/Analysis/LoopNestAnalysis.h"
@@ -133,7 +133,8 @@ DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisMa
 
 	// a set of decoupled computation node
 	SmallVector<User*> comp(traversed.begin(), traversed.end());
-	SmallVector<Value*> invars;
+	SmallPtrSet<Value*, 32> invars;
+//	SmallVector<Value*> invars;
 
 	// tracking in-comming edge
 	for (auto *user : traversed) {
@@ -151,26 +152,33 @@ DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisMa
 						!mem_load.contains(dyn_cast<LoadInst>(operand))) {
 					// constant values
 					if (auto *c = dyn_cast<Constant>(operand)) {
-						invars.emplace_back(c);
+						invars.insert(c);
 					} else {
-						// skip some node
+						if (invars.contains(operand)) {
+							// already added as invars
+							continue;
+						}
+						// skip some nodes
 						Value* last = operand;
-						SmallVector<Value*> hist;
-						while (isa<TruncInst>(*last) || isa<BitCastInst>(*last)) {
+						SmallVector<Value*> seq;
+						while (isa<TruncInst>(*last) || isa<BitCastInst>(*last) ||
+								isa<UnaryOperator>(*last)) {
 							if (auto next = dyn_cast<User>(last)->getOperand(0)) {
-								hist.emplace_back(last);
+								seq.emplace_back(last);
 								last = next;
 							} else {
 								break;
 							}
 						}
+
 						// check if it is defined outside the loop
 						if (!kernel_nodes.contains(dyn_cast<User>(last))) {
-							invars.emplace_back(last);
 							// save skip history
-							if (hist.size() > 0) {
-								result.setInvarSkipHistory(last, hist);
+							if (seq.size() > 0) {
+								seq.emplace_back(last);
+								result.setInvarSkipSequence(operand, seq);
 							}
+							invars.insert(operand);
 						} else {
 							LLVM_DEBUG(
 								dbgs() << WARN_DEBUG_PREFIX  << "Unreachable nodes inside the kernel: ";
@@ -195,7 +203,7 @@ DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisMa
 	result.setMemLoad(DecoupledAnalysis::MemLoadList(mem_load.begin(), mem_load.end()));
 	result.setMemStore(DecoupledAnalysis::MemStoreList(mem_store.begin(), mem_store.end()));
 	result.setComp(std::move(comp));
-	result.setInvars(std::move(invars));
+	result.setInvars(DecoupledAnalysis::InvarList(invars.begin(), invars.end()));
 	return result;
 }
 

@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 14-02-2022 08:08:49
+#   Last Modified: 18-02-2022 08:36:02
 ###
 
 from argparse import ArgumentParser
@@ -41,7 +41,11 @@ from shutil import get_terminal_size
 from functools import reduce
 import tempfile
 from collections import defaultdict
-from unittest import skip
+from unittest import result
+
+
+
+
 
 installed_dir = str(Path(__file__).parent.parent.absolute())
 default_libdir = installed_dir + "/lib"
@@ -52,12 +56,41 @@ from cc_config.Config import *
 
 IMM_FILES = []
 
+# monitoring dot file creation
+event_handler = None
+observer = None
+dot_list = set()
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import PatternMatchingEventHandler
+    def start_watchdog(dir_list):
+        global event_handler, observer, dot_list
+        def on_modified(event):
+            global dot_list
+            filepath = event.src_path
+            dot_list.add(filepath)
+
+        event_handler = PatternMatchingEventHandler(["*.dot"])
+        event_handler.on_modified = on_modified
+        observer = Observer()
+        for target_dir in dir_list:
+            observer.schedule(event_handler, target_dir, recursive=True)
+        observer.start()
+    def end_watchdog():
+        observer.stop()
+        observer.join()
+        
+except ModuleNotFoundError:
+    start_watchdog = lambda dir_list: None
+    end_watchdog = lambda : None
+
 try:
     import graphviz as g
     visualize_graph = lambda engine, infile, outfile : \
         g.render(engine, filepath=infile, outfile=outfile, quiet=True)
 except ModuleNotFoundError:
     visualize_graph = lambda engine, infile, outfile : None
+
 
 def parser():
     description = "OVERVIEW: CGRA OpenMP compiler driver based on LLVM/clang"
@@ -114,7 +147,10 @@ def parser():
     argparser.add_argument("--dfg-file-prefix", type=str,
                             help="The prefix used for the data flow graph name")
     argparser.add_argument("--visualize-dfg", action="store_true",
-                            help="")
+                            help="Create visualized file of the generated DFG")
+    argparser.add_argument("--visualize-dfg-type", type=str,
+                            default="png",
+                            help="File format for the DFG visulization (default: png)")
     argparser.add_argument("--simplify-dfg-name", action="store_true",
                             help="Use simplified file name for DFGs")
     # for other options
@@ -275,8 +311,46 @@ def passCGRAOmp(infile, outfile, libpath, config, options, verbose):
     cmd += [infile]
     cmd += ["-o", outfile]
     cmd += options
-    return run("Verify kernel, extract DFG, and insert runtime",\
+
+    start_watchdog(str(Path(infile).parent))
+    result = run("Verify kernel, extract DFG, and insert runtime",\
                 cmd, verbose)
+    end_watchdog()
+    return result
+
+def visualizeDFG(type, vervose):
+    msg_fmt = "{{0:<{0}}}: ".format(int(get_terminal_size().columns / 1.5 ))
+    print(msg_fmt.format("DFG Visualization"), file=sys.stdout, flush = True, end = "")
+
+    success = True
+    msg = ""
+    for dotfile in dot_list:
+        p = Path(dotfile)
+        outfile = str(p.parent) + "/" + p.stem + "." + type
+        try:
+            result = visualize_graph("dot", dotfile, outfile)
+        except Exception as E:
+            msg = "\t" + str(E) + "\n"
+            success = False
+            break
+
+        if result is not None:
+            if vervose:
+                msg += "\tGenerate a visualized data-flow-graph: {0}\n".format(result)
+        else:
+            msg = "\tGraphviz might not be install\n"
+            success = False
+            break
+    
+    if success:
+        # success
+        print("[" + GREEN_STR.format("  OK  ") + "]", \
+                    file = sys.stdout, flush = True)
+    else:
+        print("[" + RED_STR.format("FAILED") + "]", \
+                    file = sys.stdout, flush = True)
+
+    print(msg, file=sys.stdout, flush = True, end="")
 
 def main():
     args = parser()
@@ -371,6 +445,10 @@ def main():
         add_imm(cgra_post_name)
     else:
         return
+
+    if args.visualize_dfg:
+        visualizeDFG(args.visualize_dfg_type, args.verbose)
+
 
 def addImmFile(f):
     IMM_FILES.append(f)

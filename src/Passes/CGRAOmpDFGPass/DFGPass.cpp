@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 17-02-2022 22:02:18
+*    Last Modified: 18-02-2022 04:19:44
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -239,7 +239,7 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 
 	DenseMap<Value*,DFGNode*> value_to_node;
 	SmallPtrSet<User*, 32> custom_op;
-	ValueMap<Value*, Value*> invars_tail;
+	ValueMap<Value*, Value*> invars_src;
 
 	CGRADFG G;
 
@@ -289,33 +289,25 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 
 	// add loop invariants as const nodes
 	for (auto val : DA.get_invars()) {
-		auto NewNode = make_const_node(val);
+		DFGNode* NewNode;
+		// get node actually connected to comp or store node
+		if (auto skip_seq = DA.getSkipSequence(val)) {
+			invars_src[val] = skip_seq->back();
+			NewNode = make_const_node(val, skip_seq);
+		} else {
+			invars_src[val] = val;
+			NewNode = make_const_node(val);
+		}
 		NewNode = G.addNode(*NewNode);
 		value_to_node[val] = NewNode;
-		// get node actually connected to comp or store node
-		if (auto skip_hist = DA.getSkipHist(val)) {
-			errs() << "skip history found for ";
-			val->dump();
-			for (auto hoge : *skip_hist) {
-				errs() << "\t";
-				hoge->dump();
-			}
-			invars_tail[skip_hist->front()] = val;
-		} else {
-			invars_tail[val] = val;
-		}
 	}
 
 	auto connect = [&](User *I, int num_operand) {
 		DFGNode *dst = value_to_node[I];
 		for (int i = 0; i < num_operand; i++) {
-			DFGNode* src = nullptr;
 			auto operand = I->getOperand(i);
-			if (invars_tail.find(operand) != invars_tail.end()) {
-				src = value_to_node[invars_tail[operand]];
-			} else {
-				src = value_to_node[operand];
-			}
+			DFGNode* src = value_to_node[operand];
+
 			if (src) {
 				auto NewEdge = new DFGEdge(*dst, i);
 				assert(G.connect(*src, *dst, *NewEdge) && "Trying to connect non-exist nodes");

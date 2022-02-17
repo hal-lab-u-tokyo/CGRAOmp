@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 17-02-2022 15:11:25
+*    Last Modified: 18-02-2022 07:36:40
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -50,8 +50,9 @@ using namespace std;
 string ConstantNode::getConstStr() const
  {
 
-	auto type_str = getTypeName(val->getType());
-	if (Constant* const_value = dyn_cast<Constant>(val)) {
+	Value* data_src = (skip_seq) ? skip_seq->back() : val;
+	auto type_str = getTypeName(data_src->getType());
+	if (Constant* const_value = dyn_cast<Constant>(data_src)) {
 		if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
 			return formatv("{0}={1}", type_str, cint->getSExtValue());
 		} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
@@ -65,10 +66,32 @@ string ConstantNode::getConstStr() const
 			);
 		}
 	} else {
-		return formatv("{0}=\"data({1})\"", type_str, val->getName());
+		return formatv("{0}=\"Value({1})\"", type_str, data_src->getName());
 	}
 	return "";
 }
+
+string ConstantNode::getNodeAttr() const {
+	string str = "";
+	if (skip_seq) {
+		SmallVector<string> opcode_vec;
+		for (auto it = ++(skip_seq->rbegin()); it != skip_seq->rend(); it++) {
+			if (auto inst = dyn_cast<Instruction>(*it)) {
+				opcode_vec.emplace_back(inst->getOpcodeName());
+			} else {
+				LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX
+							<< " Unexpected skip instruction: ";
+							(*it)->print(dbgs());
+							dbgs() << "\n"
+				);
+			}
+		}
+		str = formatv("skipped=\"({0})\",", make_range(opcode_vec.begin(), opcode_vec.end()));
+	} 
+
+	return formatv("type=const,{0}{1}", str, getConstStr());
+}
+
 
 /* ================== Implementation of CGRADFG ================== */
 CGRADFG::NodeType* CGRADFG::addNode(NodeType &N)

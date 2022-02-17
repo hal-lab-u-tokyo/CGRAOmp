@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 11:36:50
-*    Last Modified: 15-02-2022 15:28:50
+*    Last Modified: 18-02-2022 03:08:00
 */
 #ifndef DecoupledAnalysis_H
 #define DecoupledAnalysis_H
@@ -158,25 +158,25 @@ namespace CGRAOmp {
 			}
 
 			/**
-			 * @brief Set the node traversal skip history for loop invariant nodes
+			 * @brief Set the node traversal skip sequence for loop invariant nodes
 			 * 
-			 * @param node the terminal node of loop invariant
-			 * @param hist history of skipped nodes
+			 * @param node the loop invariant node
+			 * @param hist sequence of skipped nodes
 			 */
-			void setInvarSkipHistory(Value* node, SmallVector<Value*> hist) {
-				invar_skip_hist[node] = hist;
+			void setInvarSkipSequence(Value* node, SmallVector<Value*> seq) {
+				invar_skip_seq[node] = seq;
 			}
 
 			/**
-			 * @brief get the node traversal skip history
+			 * @brief get the node traversal skip sequence
 			 * 
-			 * @param node the terminal node of loop invariant
+			 * @param node the loop invariant node
 			 * @return SmallVector<Value*>* a sequence of skipped node
 			 * if there is any skipped node. Otherwise it returns nullptr
 			 */
-			SmallVector<Value*>* getSkipHist(Value* node) {
-				if (invar_skip_hist.find(node) != invar_skip_hist.end()) {
-					return &(invar_skip_hist[node]);
+			SmallVector<Value*>* getSkipSequence(Value* node) {
+				if (invar_skip_seq.find(node) != invar_skip_seq.end()) {
+					return &(invar_skip_seq[node]);
 				} else {
 					return nullptr;
 				}
@@ -189,7 +189,8 @@ namespace CGRAOmp {
 			CompList comp;
 			InvarList loop_invariant;
 			StringRef err_cause;
-			DenseMap<Value*, SmallVector<Value*>> invar_skip_hist;
+			// key = , value = 
+			DenseMap<Value*, SmallVector<Value*>> invar_skip_seq;
 
 			bool err = false;
 
