@@ -25,13 +25,14 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 11-02-2022 00:23:24
+*    Last Modified: 17-02-2022 21:41:25
 */
 
 
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Module.h"
 
 #include "common.hpp"
@@ -296,9 +297,9 @@ StringMap<InstMap::entry_generator> InstMap::entry_gen({
 	BINOP_ENTRY("ashr", AShr), BINOP_ENTRY("and", And),
 	BINOP_ENTRY("or", Or), BINOP_ENTRY("xor", Xor),
 	COMPOP_ENTRY("icmp", true), COMPOP_ENTRY("fcmp", false),
-	MEMOP_ENTRY("load", Load), MEMOP_ENTRY("store", Store)
+	MEMOP_ENTRY("load", Load), MEMOP_ENTRY("store", Store),
+	OTHEROP_ENTRY("select", Instruction::OtherOps::Select),
 });
-
 
 InstMapEntry* InstMap::find(StringRef opcode)
 {
@@ -364,6 +365,55 @@ bool CompOpMapEntry::match(Instruction *I)
 			return map_cond->match(I);
 		}
 	}
+	return false;
+}
+
+/* ================== Implementation of OtherOpMapEntry ================== */
+bool OtherOpMapEntry::match(Instruction *I)
+{
+
+	auto hoge = dyn_cast<BranchInst>(I);
+
+	switch (cat) {
+		case OptCategory::Terminator:
+		{
+			#define HANDLE_TERM_INST(num, opc, Class) { \
+				case Instruction::TermOps::opc: \
+					if (auto inst = dyn_cast<Class>(I)) { \
+						return map_cond->match(I); \
+					} \
+					break; \
+			}
+			switch (term_ops) {
+				#include "llvm/IR/Instruction.def"
+			}
+			break;
+		}
+		case OptCategory::Cast:
+			if (auto cast_inst = dyn_cast<CastInst>(I)) {
+				if (cast_inst->getOpcode() == cast_ops) {
+					return map_cond->match(I);
+				}
+			}
+			break;
+		case OptCategory::Other:
+			{
+			#define HANDLE_OTHER_INST(num, opc, Class) { \
+				case Instruction::OtherOps::opc: \
+					if (auto inst = dyn_cast<Class>(I)) { \
+						return map_cond->match(I); \
+					} \
+					break; \
+			}
+			switch (other_ops) {
+				#include "llvm/IR/Instruction.def"
+			}
+			break;
+		}
+		default:
+			llvm_unreachable("Unknown category for other operations");
+	}
+	
 	return false;
 }
 

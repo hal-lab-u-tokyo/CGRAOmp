@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 11:38:23
-*    Last Modified: 15-02-2022 16:34:28
+*    Last Modified: 17-02-2022 22:33:24
 */
 
 #include "llvm/Analysis/LoopNestAnalysis.h"
@@ -185,7 +185,7 @@ DecoupledAnalysisPass::Result DecoupledAnalysisPass::run(Loop &L, LoopAnalysisMa
 				DEBUG_WITH_TYPE(VerboseDebug,
 					dbgs() << DBG_DEBUG_PREFIX << "Source node of ";
 					user->print(dbgs());
-					dbgs() << " is not User type";
+					dbgs() << " is not User type\n";
 				);
 			}
 		}
@@ -210,3 +210,5 @@ bool DecoupledAnalysisPass::isPointerValue(LoadInst *I)
 	return false;
 }
 
+
+#undef DEBUG_TYPE

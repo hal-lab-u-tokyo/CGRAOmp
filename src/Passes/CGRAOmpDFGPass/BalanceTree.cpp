@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  01-02-2022 11:44:11
-*    Last Modified: 07-02-2022 16:11:40
+*    Last Modified: 17-02-2022 15:16:35
 */
 #include "common.hpp"
 #include "DFGPass.hpp"
@@ -252,3 +252,5 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 	}
 
 }
+
+#undef DEBUG_TYPE

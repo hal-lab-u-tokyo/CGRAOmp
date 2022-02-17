@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 15-02-2022 16:49:11
+*    Last Modified: 17-02-2022 22:02:18
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -206,6 +206,15 @@ bool DFGPassHandler::createDataFlowGraphsForAllKernels(Function &F, FunctionAnal
 	VerifyResult& verify_result = AM.getResult<VerifyPassT>(F);
 	auto AR = getLSAR(F, AM);
 	auto &LAM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+
+	LLVM_DEBUG(
+		if (verify_result.kernels().empty()) {
+			dbgs() << WARN_DEBUG_PREFIX 
+				<< formatv("{0} does not have any valid kernels\n", 
+					F.getName());
+		}
+	);
+
 	for (auto L : verify_result.kernels()) {
 		createDataFlowGraph<VerifyPassT>(F, *L, AM, LAM, AR);
 	}
@@ -251,14 +260,13 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	for (auto user : DA.get_comps()) {
 		if (auto *inst = dyn_cast<Instruction>(user)) {
 			if (auto *imap = model->isSupported(inst)) {
-				if (auto binop = dyn_cast<BinaryOpMapEntry>(imap)) {
-					auto NewNode = make_comp_node(inst, imap->getMapName());
-					NewNode = G.addNode(*NewNode);
-					value_to_node[inst] = NewNode;
-				} else if (auto customop = dyn_cast<CustomInstMapEntry>(imap)) {
-					auto NewNode = make_comp_node(inst, customop->getMapName());
-					NewNode = G.addNode(*NewNode);
-					value_to_node[inst] = NewNode;
+				// if (auto binop = dyn_cast<BinaryOpMapEntry>(imap)) {
+				auto NewNode = make_comp_node(inst, imap->getMapName());
+				NewNode = G.addNode(*NewNode);
+				value_to_node[inst] = NewNode;
+
+				if (auto customop = dyn_cast<CustomInstMapEntry>(imap)) {
+
 					custom_op.insert(inst);
 				}
 			} else {

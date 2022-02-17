@@ -25,22 +25,17 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-02-2022 13:23:43
-*    Last Modified: 15-02-2022 13:56:26
+*    Last Modified: 17-02-2022 15:26:53
 */
 #ifndef AGVerifyPass_H
 #define AGVerifyPass_H
 
 #include "llvm/IR/PassManager.h"
-#include "llvm/IR/Function.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
-#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Debug.h"
 
 #include "VerifyPass.hpp"
@@ -123,7 +118,7 @@ namespace CGRAOmp {
 	 * 
 	 * @tparam Kind A Kind of Address Generator
 	 * 
-	 * @remarks This template needs specilization of @em run_impl method for each address generator type
+	 * @remarks This template needs specilization of @em run method for each address generator type
 	*/
 	template <AddressGenerator::Kind Kind>
 	class VerifyAGCompatiblePass :

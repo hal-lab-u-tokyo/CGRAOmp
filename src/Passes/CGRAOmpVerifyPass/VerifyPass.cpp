@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 15-02-2022 15:27:05
+*    Last Modified: 17-02-2022 15:53:54
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -222,6 +222,8 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 				llvm_unreachable("This type of AG is not implemted\n");
 		}
 		lvr.setResult(ag_compat);
+
+		// if the kernel passes all the verifications, it is registered
 		if (lvr) {
 			result.registerKernel(L, lvr);
 		}
@@ -336,15 +338,4 @@ LoopStandardAnalysisResults CGRAOmp::getLSAR(Function &F,
 	);
 }
 
-CGRAModel* CGRAOmp::getModelFromLoop(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR)
-{
-	// auto &MAMProxy = AM.getResult<ModuleAnalysisManagerLoopProxy>(L, AR);
-	// // auto &FAMProxy = AM.getResult<FunctionAnalysisManagerLoopProxy>(L, AR);
-	// // auto *F = (*(L.block_begin()))->getParent();
-	// // auto &MAMProxy = FAMProxy.getCachedResult<FunctionAnalysisManagerModuleProxy>(*F);
-	// // auto &M = *(F->getParent());
-	// // auto *MM = MAMProxy.getCachedResult<ModelManagerPass>(M);
-	// // assert(MM && "ModuleManagerPass must be executed at the beginning");
-	// // return MM->getModel();
-	return nullptr;
-}
+#undef DEBUG_TYPE

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 14-02-2022 13:57:46
+*    Last Modified: 17-02-2022 15:11:25
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -200,3 +200,5 @@ string CGRADFGDotGraphTraits::getGraphProperties(const CGRADFG *G) {
 
 	return buf;
 }
+
+#undef DEBUG_TYPE

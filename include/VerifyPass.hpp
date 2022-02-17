@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 15-02-2022 15:23:14
+*    Last Modified: 17-02-2022 15:54:02
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -141,7 +141,7 @@ namespace CGRAOmp {
 			 * @brief get the kind of derived class
 			 * @return VerificationKind 
 			 */
-			VerificationKind getKind() const {
+			virtual VerificationKind getKind() const {
 				return kind;
 			}
 
@@ -434,10 +434,6 @@ namespace CGRAOmp {
 	 */
 	LoopStandardAnalysisResults getLSAR(Function &F,
 								FunctionAnalysisManager &AM);
-
-	CGRAModel* getModelFromLoop(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR);
-
-
 
 
 }

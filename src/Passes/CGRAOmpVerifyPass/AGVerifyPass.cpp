@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-02-2022 13:01:22
-*    Last Modified: 15-02-2022 13:41:30
+*    Last Modified: 17-02-2022 15:10:12
 */
 
 #include "AGVerifyPass.hpp"
@@ -63,3 +63,4 @@ VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::run(Loop &L,
 	return result;
 }
 
+#undef DEBUG_TYPE

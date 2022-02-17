@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:35:11
-*    Last Modified: 15-02-2022 15:08:42
+*    Last Modified: 17-02-2022 21:38:52
 */
 
 #ifndef CGRAInstMap_H
@@ -81,6 +81,14 @@
 		return make_shared<MemoryOpMapEntry>(OPCODE, Instruction::MemoryOps::OPENUM, c); \
 	} else { \
 		return make_shared<MemoryOpMapEntry>(OPCODE, Instruction::MemoryOps::OPENUM); \
+	}\
+})
+
+#define OTHEROP_ENTRY(OPCODE, OPENUM) make_pair(OPCODE, [](MapCondition *c){ \
+	if (c) { \
+		return make_shared<OtherOpMapEntry>(OPCODE, OPENUM, c); \
+	} else { \
+		return make_shared<OtherOpMapEntry>(OPCODE, OPENUM); \
 	}\
 })
 
@@ -253,7 +261,8 @@ namespace CGRAOmp
 				BinaryOp,
 				CompOp,
 				MemOp,
-				CustomOp
+				CustomOp,
+				OtherOp
 			};
 
 			/**
@@ -502,6 +511,78 @@ namespace CGRAOmp
 		private:
 			bool isCustomOpFunc(Function *F);
 			ModuleAnalysisManager &MAM;
+	};
+
+	/**
+	 * @class OtherOpMapEntry
+	 *  @brief A derived class from InstMapEntry for other type of operations
+	 */
+	class OtherOpMapEntry : public InstMapEntry {
+		public:
+			static constexpr InstMapEntry::InstMapKind OtherOp =
+				 InstMapEntry::InstMapKind::OtherOp;
+			/**
+			 * @brief Construct a new OtherOpMapEntry object for terminator instructions
+			 * 
+			 * @param opcode string of the instruction opcode
+			 * @param ops a type of terminator operations
+			 */
+			OtherOpMapEntry(StringRef opcode, Instruction::TermOps ops) :
+				InstMapEntry(opcode, OtherOp), term_ops(ops), 
+				cat(OptCategory::Terminator) {};
+
+			/**
+			 * @brief Construct a new OtherOpMapEntry object for cast instructions
+			 * 
+			 * @param opcode string of the instruction opcode
+			 * @param ops a type of cast operations
+			 */
+			OtherOpMapEntry(StringRef opcode, Instruction::CastOps ops) :
+				InstMapEntry(opcode, OtherOp), cast_ops(ops), cat(OptCategory::Cast) {};
+
+			/**
+			 * @brief Construct a new OtherOpMapEntry object for other instructions
+			 * 
+			 * @param opcode string of the instruction opcode
+			 * @param ops a type of other operations
+			 */
+			OtherOpMapEntry(StringRef opcode, Instruction::OtherOps ops) :
+				InstMapEntry(opcode, OtherOp), other_ops(ops),
+				cat(OptCategory::Other) {};
+
+			/**
+			 * @brief Construct a new OtherOpMapEntry object with an initial MapCondition instance
+			 * 
+ 			 * @tparam OpEnumTy enumeration type of opcode
+			 * @param opcode string of the instruction opcode
+			 * @param ops a type of binary operations
+			 * @param cond mapping condition
+			 */
+			template <typename OpEnumTy>
+			OtherOpMapEntry(StringRef opcode, OpEnumTy ops,
+								MapCondition* cond) :
+				OtherOpMapEntry(opcode, ops) {
+					map_cond = cond;
+				};
+
+			/**
+			 * @brief Derived function from InstMapEntry::match specilized for other operators
+			 */
+			bool match(Instruction *I);
+
+			static bool classof(const InstMapEntry* imap) {
+				return imap->getKind() == OtherOp;
+			}
+		private:
+			enum class OptCategory {
+				Terminator,
+				Cast,
+				Other,
+			};
+			OptCategory cat;
+			Instruction::OtherOps other_ops;
+			Instruction::TermOps term_ops;
+			Instruction::CastOps cast_ops;
 	};
 
 	/**
