@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  18-02-2022 18:10:42
-*    Last Modified: 19-02-2022 06:54:20
+*    Last Modified: 19-02-2022 08:13:21
 */
 #ifndef LoopDependencyAnalysis_H
 #define LoopDependencyAnalysis_H
@@ -82,6 +82,10 @@ namespace CGRAOmp {
 
 			Instruction* getDef() {
 				return def;
+			}
+
+			PHINode* getPhi() {
+				return phi;
 			}
 
 		

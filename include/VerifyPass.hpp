@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 19-02-2022 07:03:17
+*    Last Modified: 19-02-2022 08:40:25
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -325,6 +325,34 @@ namespace CGRAOmp {
 
 	};
 
+	class InstAvailability : public VerifyResultBase {
+		public:
+			InstAvailability() : 
+				VerifyResultBase(VerificationKind::InstAvailability) {}
+
+			void filter(SmallVector<Instruction*> *list);
+			void filter(SmallPtrSetImpl<Instruction*> *list);
+
+			void print(raw_ostream &OS) const override;
+
+			void add_unsupported(Instruction* I) {
+				unsupported.insert(I);
+			}
+
+		private:
+			/**
+			 * @brief bool_operator
+			 * 
+			 * @return true if the kernel includes no unsupported inst
+			 * @return otherwise false
+			 */
+			bool bool_operator_impl() override {
+				return unsupported.size() == 0;
+			}
+
+			SmallPtrSet<Instruction*, 32> unsupported;
+	};
+
 	/**
 	 * @class  VerifyInstAvailabilityPass
 	 * @brief A template class for verify the instruction availability
@@ -336,7 +364,7 @@ namespace CGRAOmp {
 	class VerifyInstAvailabilityPass : 
 				public AnalysisInfoMixin<VerifyInstAvailabilityPass<VerifyPassTy>> {
 		public:
-			using Result = SimpleVerifyResult<VerificationKind::InstAvailability>;
+			using Result = InstAvailability;
 
 			Result run(Loop &L, LoopAnalysisManager &AM,
 						LoopStandardAnalysisResults &AR) {
@@ -348,23 +376,15 @@ namespace CGRAOmp {
 				#undef DEBUG_TYPE
 
 				auto unsupported_insts = checkUnsupportedInst(L, AM, AR);
+				Result result;
+
 				if (unsupported_insts.hasValue()) {
 					// Invalid
-					SmallSet<StringRef, 32> opcodes;
 					for (auto inst : *unsupported_insts) {
-						opcodes.insert(inst->getOpcodeName());
+						result.add_unsupported(inst);
 					}
-					std::string msg = "Unsupported instructions: ";
-					for (auto opcode_name : opcodes) {
-						msg += opcode_name.str() + " ";
-					}
-					auto R = SimpleVerifyResult<VerificationKind::InstAvailability>(msg);
-					R.setVio();
-					return R;
-				} else {
-					auto R = SimpleVerifyResult<VerificationKind::InstAvailability>();
-					return R;
 				}
+				return result;
 			};
 
 		private:

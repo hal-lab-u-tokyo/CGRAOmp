@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 19-02-2022 07:10:30
+*    Last Modified: 19-02-2022 08:40:13
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -39,6 +39,7 @@
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Support/Error.h"
+#include "llvm/ADT/SetOperations.h"
 
 #include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -52,6 +53,7 @@
 
 #include <system_error>
 #include <functional>
+#include <set>
 
 using namespace llvm;
 using namespace CGRAOmp;
@@ -59,6 +61,35 @@ using namespace CGRAOmp;
 #define DEBUG_TYPE "cgraomp"
 
 static const char *VerboseDebug = DEBUG_TYPE "-verbose";
+
+
+/* ================= Implementation of InstAvailability ================= */
+void InstAvailability::print(raw_ostream &OS) const {
+	std::set<StringRef> unsupported_opcode;
+
+	for (auto inst : unsupported) {
+		unsupported_opcode.insert(inst->getOpcodeName());
+	}
+
+	if (unsupported_opcode.size() > 0) {
+		OS << formatv("Unsupported instructions are used: {0}",
+			make_range(unsupported_opcode.begin(), unsupported_opcode.end()));
+	} else {
+		OS << "All instructions are supported\n";
+	}
+}
+
+void InstAvailability::filter(SmallVector<Instruction*> *list)
+{
+	SmallPtrSet<Instruction*, 32> sub(list->begin(), list->end());
+	//update (unsupported := unsupported - sub)
+	set_subtract(unsupported, sub);
+}
+
+void InstAvailability::filter(SmallPtrSetImpl<Instruction*> *list)
+{
+	set_subtract(unsupported, *list);
+}
 
 /* ================= Implementation of VerifyInstAvailabilityPass ================= */
 
@@ -199,18 +230,10 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		auto DAR = DecoupleAnalysisResult(buf);
 		lvr.setResult(&DAR);
 		
-
-		// verify instruction compatibility
-		auto inst_avail = 
-			LPM.getResult<VerifyInstAvailabilityPass<DecoupledVerifyPass>>(*L, AR);
-		if (!inst_avail) {
-				LLVM_DEBUG(inst_avail.print(dbgs() << WARN_DEBUG_PREFIX);
-				dbgs() << "\n";	);
-		}
-		lvr.setResult(&inst_avail);
+		// excepted instructions for availability verification
+		SmallPtrSet<Instruction*, 32> except_inst;
 
 		// verify inter-loop depedency
-		
 		auto LD = LPM.getResult<LoopDependencyAnalysisPass>(*L, AR);
 		switch (dec_model->getInterLoopDepType()) {
 			case CGRAModel::InterLoopDep::No:
@@ -232,9 +255,31 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 				lvr.setResult(&LDR);
 			}
 			break;
+			case CGRAModel::InterLoopDep::BackwardInst:
+			{
+				for (auto idv_dep : LD.idv_deps()) {
+					except_inst.insert(idv_dep->getPhi());
+				}
+				for (auto dep : LD.lc_deps()) {
+					except_inst.insert(dep->getPhi());
+				}
+			}
+			break;
 			default:
 				llvm_unreachable("This type of capability for inter loop dependency is not implemented");
 		}
+
+		// verify instruction compatibility
+		auto inst_avail = 
+			LPM.getResult<VerifyInstAvailabilityPass<DecoupledVerifyPass>>(*L, AR);
+
+		inst_avail.filter(&except_inst);
+		if (!inst_avail) {
+				LLVM_DEBUG(inst_avail.print(dbgs() << WARN_DEBUG_PREFIX);
+				dbgs() << "\n";	);
+		}
+		lvr.setResult(&inst_avail);
+
 
 		// verify conditional parts
 		
