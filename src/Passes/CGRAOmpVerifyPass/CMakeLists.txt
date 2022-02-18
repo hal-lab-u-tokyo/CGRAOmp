@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  27-08-2021 17:07:48
-#    Last Modified: 15-02-2022 13:31:41
+#    Last Modified: 18-02-2022 18:42:00
 #
 add_llvm_library( libCGRAOmpVerifyPass MODULE
   ## append source file list here
@@ -33,7 +33,7 @@ add_llvm_library( libCGRAOmpVerifyPass MODULE
   DecoupledAnalysis.cpp
   RegisterPass.cpp
   AGVerifyPass.cpp
-  LoopDependencyVerifyPass.cpp
+  LoopDependencyAnalysis.cpp
   VerifyPasses.def
   
   DEPENDS

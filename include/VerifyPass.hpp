@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 17-02-2022 15:54:02
+*    Last Modified: 19-02-2022 07:03:17
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -266,6 +266,7 @@ namespace CGRAOmp {
 	};
 
 	using DecoupleAnalysisResult = SimpleVerifyResult<VerificationKind::Decoupling>;
+	using InterLoopDependencyAnalysisResult = SimpleVerifyResult<VerificationKind::InterLoopDep>;
 
 	/**
 	 * @class VerifyPassBase

@@ -25,10 +25,12 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-02-2022 13:01:22
-*    Last Modified: 18-02-2022 15:56:08
+*    Last Modified: 18-02-2022 19:40:07
 */
 
 #include "AGVerifyPass.hpp"
+
+#include "llvm/Analysis/IVDescriptors.h"
 
 #include <deque>
 
@@ -93,10 +95,12 @@ VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::run(Loop &L,
 		}
 	}
 
-	LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX
-		<< "Loop Kernel " << L.getName()
-		<< " has memory access incompatible with the Affine AG\n";
-	);
+	if (!result) {
+		LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX
+			<< "Loop Kernel " << L.getName()
+			<< " has memory access incompatible with the Affine AG\n";
+		);
+	}
 	DEBUG_WITH_TYPE(VerboseDebug,
 		dbgs() << DBG_DEBUG_PREFIX << "analyzed result of affine access\n";
 		result.print(dbgs()));
@@ -124,7 +128,6 @@ void AffineAGCompatibility::print(raw_ostream &OS) const
 /* ================= Utility functions ================= */
 void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, ScalarEvolution &SE, AffineAGCompatibility::ConfigTy& C)
 {
-
 	// stack for depth first seach
 	std::vector<const SCEV*> scev_stack;
 	scev_stack.emplace_back(S);
@@ -139,6 +142,7 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, ScalarEvolution &SE, AffineAGC
 
 	// depth first search
 	while (!scev_stack.empty()) {
+		bool end_addrec_prev = end_addrec;
 		// pop
 		const auto *scev = scev_stack.back();
 		scev_stack.pop_back();
@@ -155,6 +159,7 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, ScalarEvolution &SE, AffineAGC
 					auto *SAR = dyn_cast<SCEVAddRecExpr>(scev);
 					auto *step = SAR->getStepRecurrence(SE);
 					const auto *start = SAR->getStart();
+					InductionDescriptor IDV;
 					// TODO: below code cannot determine outer most loop count
 					int count = SE.getSmallConstantMaxTripCount(SAR->getLoop());
 					if (step->getSCEVType() == scConstant) {

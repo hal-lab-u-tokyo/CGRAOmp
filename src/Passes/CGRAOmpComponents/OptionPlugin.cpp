@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 14-02-2022 08:01:42
+*    Last Modified: 19-02-2022 05:50:00
 */
 
 #include "llvm/Support/CommandLine.h"
@@ -86,6 +86,12 @@ cl::opt<bool> CGRAOmp::OptLoopInvariantAsConstant("invar-loads-as-const",
 cl::opt<bool> CGRAOmp::OptUseSimpleDFGName("simplify-dfg-name",
 			cl::init(false),
 			cl::desc("Simplify the file name for each DFG"));
+
+
+cl::opt<int> CGRAOmp::OptMemoryDependencyDistanceThreshold(
+			"memory-dependence-distance-threshold",
+			cl::init(1),
+			cl::desc("Threshold count for how close memory dependency is regarded as a data dependency in data flow graph (Default: 1)"));
 
 /**
  * @details It parses a string based on a regular expression

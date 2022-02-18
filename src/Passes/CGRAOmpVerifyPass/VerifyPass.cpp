@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 17-02-2022 15:53:54
+*    Last Modified: 19-02-2022 07:10:30
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -48,6 +48,7 @@
 #include "CGRAOmpAnnotationPass.hpp"
 #include "DecoupledAnalysis.hpp"
 #include "AGVerifyPass.hpp"
+#include "LoopDependencyAnalysis.hpp"
 
 #include <system_error>
 #include <functional>
@@ -209,9 +210,34 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		lvr.setResult(&inst_avail);
 
 		// verify inter-loop depedency
+		
+		auto LD = LPM.getResult<LoopDependencyAnalysisPass>(*L, AR);
+		switch (dec_model->getInterLoopDepType()) {
+			case CGRAModel::InterLoopDep::No:
+			{
+				int dep_cout = LD.getNumDep() + LD.getNumMemDep();
+				std::string msg;
+				bool loop_dep_valid = true;
+				if (dep_cout > 0)  {
+					// invalid
+					msg = formatv("including {0} inter loop dependencies", dep_cout);
+					loop_dep_valid = false;
+				} else {
+					msg = "No dependency";
+				}
+				auto LDR = InterLoopDependencyAnalysisResult("No dependency");
+				if (!loop_dep_valid) {
+					LDR.setVio();
+				}
+				lvr.setResult(&LDR);
+			}
+			break;
+			default:
+				llvm_unreachable("This type of capability for inter loop dependency is not implemented");
+		}
 
 		// verify conditional parts
-
+		
 		// verify each memory access
 		VerifyResultBase *ag_compat;
 		switch (dec_model->getAG()->getKind()) {

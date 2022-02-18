@@ -25,13 +25,14 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  14-12-2021 12:39:40
-*    Last Modified: 15-02-2022 13:32:18
+*    Last Modified: 18-02-2022 18:46:09
 */
 #include "llvm/Passes/PassBuilder.h"
 
 #include "VerifyPass.hpp"
 #include "DecoupledAnalysis.hpp"
 #include "AGVerifyPass.hpp"
+#include "LoopDependencyAnalysis.hpp"
 
 using namespace CGRAOmp;
 

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:30
-*    Last Modified: 11-02-2022 00:46:49
+*    Last Modified: 19-02-2022 06:45:05
 */
 #ifndef CGRAModel_H
 #define CGRAModel_H
@@ -190,6 +190,15 @@ namespace CGRAOmp
 				return category;
 			}
 
+			/**
+			 * @brief Get the Inter Loop Dependency avility
+			 * 
+			 * @return InterLoopDep 
+			 */
+			InterLoopDep getInterLoopDepType() const {
+				return inter_loop_dep;
+			}
+
 		protected:
 			StringRef filename;
 			ConditionalStyle cond;
@@ -242,10 +251,10 @@ namespace CGRAOmp
 			 * @param cond conditional style of the CGRA
 			 * @param inter_loop_dep ability to handle inter loop dependency
 			 */
-			DecoupledCGRA(StringRef filename, AddressGenerator *foo,
+			DecoupledCGRA(StringRef filename, AddressGenerator *AG,
 							ConditionalStyle cond, InterLoopDep inter_loop_dep) :
 				CGRAModel(filename, CGRACategory::Decoupled,
-							cond, inter_loop_dep), AG(foo) {};
+							cond, inter_loop_dep), AG(AG) {};
 
 			/// copy constructor
 			DecoupledCGRA(const DecoupledCGRA&);
