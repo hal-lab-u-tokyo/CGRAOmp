@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-02-2022 13:23:43
-*    Last Modified: 17-02-2022 15:26:53
+*    Last Modified: 18-02-2022 15:50:18
 */
 #ifndef AGVerifyPass_H
 #define AGVerifyPass_H
@@ -88,18 +88,23 @@ namespace CGRAOmp {
 	*/
 	class AffineAGCompatibility : public AGCompatibility<AddressGenerator::Kind::Affine> {
 		public:
-			AffineAGCompatibility() : AGCompatibility()
+			AffineAGCompatibility() : AGCompatibility(), nested_level(0)
 			{};
 
 			/**
 			 * @brief a configration of loop control for a dimention
 			 */
 			typedef struct {
-				bool valid;
 				int64_t start;
-				int64_t inc;
-				int64_t end;
-			} config_t;
+				int64_t step;
+				int64_t count;
+			} DimEntry_t;
+
+			typedef struct {
+				bool valid;
+				SmallVector<DimEntry_t> config;
+			} ConfigTy;
+			
 
 			// for dyn_cast from VerifyResultBase pointer
 			static bool classof(const VerifyResultBase* R) {
@@ -108,8 +113,21 @@ namespace CGRAOmp {
 				}
 				return false;
 			}
-		private:
 
+			void print(raw_ostream &OS) const override;
+			
+			void add(Instruction* I, ConfigTy C) {
+				if (!C.valid) {
+					invalid_list.emplace_back(I);
+					setVio();
+				}
+				config[I] = C;
+			};
+
+		private:
+			DenseMap<Instruction*, ConfigTy> config;
+			SmallVector<Instruction*> invalid_list;
+			int nested_level;
 	};
 
 	/**
@@ -140,23 +158,24 @@ namespace CGRAOmp {
 			friend AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>>;
 			static AnalysisKey Key;
 
-			/**
-			 * @brief parse the expression of addition between SCEVs
-			 * 
-			 * @param SAR parted expression
-			 * @param SE a result of ScalarEvolution for the function
-			 */
-			void parseSCEVAddRecExpr(const SCEVAddRecExpr *SAR,
-										ScalarEvolution &SE);
-			void parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth = 0);
-
-
 	};
 
 	template <AddressGenerator::Kind Kind>
 	AnalysisKey VerifyAGCompatiblePass<Kind>::Key;
 
 
+	// /**
+	//  * @brief parse the expression of addition between SCEVs
+	//  * 
+	//  * @param SAR parted expression
+	//  * @param SE a result of ScalarEvolution for the function
+	//  */
+	// void parseSCEVAddRecExpr(const SCEVAddRecExpr *SAR,
+	// 							ScalarEvolution &SE);
+	// void parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth = 0);
+
+	void verifySCEVAsAffineAG(const SCEV* S, ScalarEvolution &SE, AffineAGCompatibility::ConfigTy& C);
+	
 
 }
 
