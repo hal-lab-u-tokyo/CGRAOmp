@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 18-02-2022 04:16:25
+*    Last Modified: 20-02-2022 01:21:02
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -73,6 +73,7 @@ namespace llvm {
 				MemStore,
 				Compare,
 				Constant,
+				GlobalData,
 				VirtualRoot,
 			};
 
@@ -235,29 +236,20 @@ namespace llvm {
 			bool _isLoad;
 	};
 
-	class ConstantNode : public DFGNode {
+	template <DFGNode::NodeKind DrivedKind>
+	class DataNode : public DFGNode {
 		public:
 			using SkipSeq = SmallVector<Value*>;
-			explicit ConstantNode(Value *v) :
-				ConstantNode(v, nullptr) {};
+			
+			explicit DataNode(Value *v) :
+				DataNode(v, nullptr) {};
 
 			// constructor used if it has skipped nodes
-			ConstantNode(Value *v, SkipSeq* seq) : 
-				DFGNode(DFGNode::NodeKind::Constant, v), skip_seq(seq) {};
+			DataNode(Value *v, SkipSeq* seq) : 
+				DFGNode(DrivedKind, v), skip_seq(seq) {};
 
-			string getUniqueName() const {
-				return "Const_" + to_string(getID());
-			}
-			string getNodeAttr() const;
 
-			string getExtraInfo() const {
-				return getConstStr();
-			}
-			static bool classof(const DFGNode *N) {
-				return N->getKind() == NodeKind::Constant;
-			}
-		private:
-			string getConstStr() const;
+		protected:
 
 			string getTypeName(Type* ty) const {
 				switch (ty->getTypeID()) {
@@ -294,8 +286,84 @@ namespace llvm {
 				}
 			}
 
+			string getSkipSeq() const {
+				#define DEBUG_TYPE "cgraomp"
+				string str = "";
+				if (skip_seq) {
+					SmallVector<string> opcode_vec;
+					for (auto it = ++(skip_seq->rbegin()); it != skip_seq->rend(); it++) {
+						if (auto inst = dyn_cast<Instruction>(*it)) {
+							opcode_vec.emplace_back(inst->getOpcodeName());
+						} else {
+							LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX
+										<< " Unexpected skip instruction: ";
+										(*it)->print(dbgs());
+										dbgs() << "\n"
+							);
+						}
+					}
+					str = formatv("skipped=\"({0})\",", make_range(opcode_vec.begin(), opcode_vec.end()));
+				}
+				return str;
+				#undef DEBUG_TYPE
+			}
+
 			SkipSeq *skip_seq;
 	};
+
+	class ConstantNode : public DataNode<DFGNode::NodeKind::Constant> {
+		public:
+			explicit ConstantNode(Value *v) :
+				ConstantNode(v, nullptr) {};
+
+			// constructor used if it has skipped nodes
+			ConstantNode(Value *v, SkipSeq* seq) : 
+				DataNode<DFGNode::NodeKind::Constant>(v, seq)  {};
+
+			string getUniqueName() const {
+				return "Const_" + to_string(getID());
+			}
+			string getNodeAttr() const;
+
+			string getExtraInfo() const {
+				return getConstStr();
+			}
+			static bool classof(const DFGNode *N) {
+				return N->getKind() == NodeKind::Constant;
+			}
+		private:
+			string getConstStr() const;
+
+	};
+
+	class GlobalDataNode : public DataNode<DFGNode::NodeKind::GlobalData> {
+		public:
+			explicit GlobalDataNode(Value *v) :
+				GlobalDataNode(v, nullptr) {};
+
+			// constructor used if it has skipped nodes
+			GlobalDataNode(Value *v, SkipSeq* seq) : 
+				DataNode<DFGNode::NodeKind::GlobalData>(v, seq)  {};
+
+			string getUniqueName() const {
+				return "GlobalData_" + to_string(getID());
+			}
+			string getNodeAttr() const;
+
+			string getExtraInfo() const {
+				return getDataStr();
+			}
+			static bool classof(const DFGNode *N) {
+				return N->getKind() == NodeKind::GlobalData;
+			}
+		private:
+			string getDataStr() const;
+
+	};
+
+
+
+
 
 
 	/**
@@ -322,11 +390,37 @@ namespace llvm {
 				return *this;
 			};
 
-			string getEdgeAttr() const {
+			virtual string getEdgeAttr() const {
 				return formatv("operand={0}", operand);
 			}
-		private:
+		protected:
 			int operand;
+	};
+
+	class LoopDependencyEdge : public DFGEdge {
+		public:
+			LoopDependencyEdge(DFGNode &N, int operand, int distance) :
+				DFGEdge(N, operand), distance(distance) {}
+
+
+			virtual string getEdgeAttr() const {
+				// add distance info
+				return formatv("operand={0},dir=back,distance={1},label={1}", operand ,distance);
+			}
+		private:
+			int distance;
+	};
+
+	class InitDataEdge : public DFGEdge {
+		public:
+			InitDataEdge(DFGNode &N, int operand) :
+				DFGEdge(N, operand) {}
+
+			virtual string getEdgeAttr() const {
+				return formatv("operand={0},type=init,label=init", operand);
+			}
+		private:
+
 	};
 
 	/**
@@ -341,8 +435,15 @@ namespace llvm {
 			using EdgeType = DFGEdge;
 			using EdgeInfoType = std::pair<NodeType*, EdgeListTy>;
 
-			/// default constructor
-			CGRADFG() : CGRADFGBase() {
+			CGRADFG() = delete;
+			/**
+			 * @brief Constructor
+			 * 
+			 * @param F Function includes the kernel of DFG
+			 * @param L Loop corresponding to the kernel of DFG
+			 */
+			CGRADFG(Function *F, Loop *L) : CGRADFGBase(),
+				F(F), L(L) {
 				createVirtualRoot();
 			};
 			CGRADFG(const CGRADFG &G) = delete;
@@ -461,6 +562,14 @@ namespace llvm {
 
 			void makeSequentialNodeID();
 
+			Function* getFunction() {
+				return F;
+			}
+
+			Loop* getLoop() {
+				return L;
+			}
+			
 		private:
 
 			void createVirtualRoot() {
@@ -470,6 +579,9 @@ namespace llvm {
 			NodeType *virtual_root = nullptr;
 
 			string name = "";
+
+			Function *F;
+			Loop *L;
 	};
 
 	/**

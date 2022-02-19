@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 19-02-2022 08:40:13
+*    Last Modified: 19-02-2022 19:51:42
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -175,9 +175,81 @@ VerifyResult TimeMultiplexedVerifyPass::run(Function &F, FunctionAnalysisManager
 	// get CGRA model
 	auto MM = AM.getResult<ModelManagerFunctionProxy>(F);
 	auto model = MM.getModel();
-	auto gene_model = model->asDerived<TMCGRA>();
+	auto tm_model = model->asDerived<TMCGRA>();
 
-	assert(!"TimeMultiplexedVerifyPass is not implemented");
+	// ensure OmpStaticShecudleAnalysis result is cached  
+	auto SI = AM.getResult<OmpStaticShecudleAnalysis>(F);
+	if (!SI) {
+		ExitOnError Exit(ERR_MSG_PREFIX);
+		std::error_code EC;
+		Exit(make_error<StringError>("Fail to find OpenMP scheduling info", EC));
+	}
+
+	// setup loop analysis manager
+	auto AR = getLSAR(F, AM);
+ 	auto &LAM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+
+	auto loop_kernels = findPerfectlyNestedLoop(F, AR);
+
+	if (loop_kernels.size() == 0) {
+		LLVM_DEBUG(dbgs() << WARN_DEBUG_PREFIX << "Cannot find any valid loop kernels\n");
+		return result;
+	}
+	DEBUG_WITH_TYPE(VerboseDebug,
+		dbgs() << DBG_DEBUG_PREFIX << "The number of kernels " 
+			   << loop_kernels.size() << "\n");
+
+	for (auto outermost: loop_kernels) {
+		LoopVerifyResult lvr;
+
+		// only extracting inner most loop
+		auto LN = LoopNest::getLoopNest(*outermost, AR.SE);
+		Loop* L = LN->getInnermostLoop();
+	
+		// excepted instructions for availability verification
+		SmallPtrSet<Instruction*, 32> except_inst;
+
+		// get inter-loop depedency analysis
+		auto LD = LAM.getResult<LoopDependencyAnalysisPass>(*L, AR);
+		for (auto idv_dep : LD.idv_deps()) {
+			except_inst.insert(idv_dep->getPhi());
+		}
+		for (auto dep : LD.lc_deps()) {
+			except_inst.insert(dep->getPhi());
+		}
+		// get brach of back edge
+		if (auto back = findBackBranch(L)) {
+			lvr.setBackBranch(L, back);
+			except_inst.insert(back);
+			if (auto condition = dyn_cast<Instruction>(lvr.getBackCondition(L))) {
+				except_inst.insert(condition);
+			}
+		}
+
+		// ignore GEP because they will be removed
+		SmallVector<Instruction*> GEPs;
+		getAllGEP(L, GEPs);
+		for (auto gep : GEPs) {
+			except_inst.insert(gep);
+		}
+
+		// verify instruction compatibility
+		auto inst_avail = 
+			LAM.getResult<VerifyInstAvailabilityPass<TimeMultiplexedVerifyPass>>(*L, AR);
+
+		inst_avail.filter(&except_inst);
+		if (!inst_avail) {
+				LLVM_DEBUG(inst_avail.print(dbgs() << WARN_DEBUG_PREFIX);
+				dbgs() << "\n";	);
+		}
+		lvr.setResult(&inst_avail);
+
+		// if the kernel passes all the verifications, it is registered
+		if (lvr) {
+			result.registerKernel(L, lvr);
+		}
+
+	}
 
 	return result;
 }
@@ -409,4 +481,26 @@ LoopStandardAnalysisResults CGRAOmp::getLSAR(Function &F,
 	);
 }
 
+BranchInst* CGRAOmp::findBackBranch(Loop *L)
+ {
+	BasicBlock *Latch = L->getLoopLatch();
+	auto BackBranch = dyn_cast<BranchInst>(Latch->getTerminator());
+	if (!BackBranch || !BackBranch->isConditional()) {
+		return nullptr;
+	} else {
+		return BackBranch;
+	}
+ }
+
+void CGRAOmp::getAllGEP(Loop* L, SmallVector<Instruction*> &List)
+{
+	for (auto &BB : L->getBlocks()) {
+		for (auto &I : *BB) {
+			if (auto gep = dyn_cast<GetElementPtrInst>(&I)) {
+				List.emplace_back(gep);
+			}
+		}
+	}
+
+}
 #undef DEBUG_TYPE

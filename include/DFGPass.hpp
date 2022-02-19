@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 09:59:52
-*    Last Modified: 18-02-2022 03:44:36
+*    Last Modified: 20-02-2022 02:06:59
 */
 #ifndef DFGPASS_H
 #define DFGPASS_H
@@ -36,6 +36,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/iterator_range.h"
 
 #include "CGRAModel.hpp"
 #include "CGRADataFlowGraph.hpp"
@@ -186,6 +187,9 @@ namespace CGRAOmp {
 	*/
 	class DFGPassHandler : public PassInfoMixin<DFGPassHandler> {
 		public:
+			using GraphList = SmallVector<CGRADFG*>;
+			using graph_iterator = GraphList::iterator;
+
 			/// Default constructor
 			DFGPassHandler();
 			~DFGPassHandler() {
@@ -200,17 +204,47 @@ namespace CGRAOmp {
 			};
 
 			PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+			
+			void addGraph(CGRADFG *G) {
+				graph_list.emplace_back(G);
+			}
+
+			graph_iterator removeGraph(CGRADFG *G) {
+				graph_iterator it;
+				//find graph
+				for (it = graph_begin(); it != graph_end(); it++) {
+					if (*it == G) {
+						break;
+					}
+				}
+				if (it != graph_end()) {
+					return graph_list.erase(it);
+				}
+				return it;
+			}
+
+			graph_iterator graph_begin() {
+				return graph_list.begin();
+			}
+
+			graph_iterator graph_end() {
+				return graph_list.end();
+			}
+
+
+			iterator_range<graph_iterator> graphs() {
+				return make_range(graph_begin(), graph_end());
+			}
+
 		private:
 			/**
 			 * @brief Create a Data Flow Graphs For All Kernels object
 			 * @tparam VerifyPassT VerifyPass type for the target CGRA category
 			 * @param F Function including offloading kernels
 			 * @param AM AnalysisManager for the function
-			 * @return true if generating all graphs without errors
-			 * @return otherwise: false
 			 */
 			template<typename VerifyPassT>
-			bool createDataFlowGraphsForAllKernels(Function &F, FunctionAnalysisManager &AM);
+			void createDataFlowGraphsForAllKernels(Function &F, FunctionAnalysisManager &AM);
 
 			/**
 			 * @brief Create a Data Flow Graph object
@@ -220,11 +254,9 @@ namespace CGRAOmp {
 			 * @param FAM AnalysisManager for the function
 			 * @param LAM AnalysisManager for the loop
 			 * @param AR AnalysisResults for the loop
-			 * @return true if generating a graph without errors
-			 * @return otherwise: false
 			 */
 			template<typename VerifyPassT>
-			bool createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager &FAM,
+			void createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager &FAM,
 										LoopAnalysisManager &LAM, 
 										LoopStandardAnalysisResults &AR);
 
@@ -287,8 +319,31 @@ namespace CGRAOmp {
 				return new ConstantNode(V, seq);
 			}
 
+			/**
+			 * @brief create global data node
+			 * 
+			 * @param V Value corresponding the global value
+			 * @return DFGNode* a pointer to the node
+			 */
+			inline DFGNode* make_global_node(Value *V) {
+				return new GlobalDataNode(V);
+			}
+
+			/**
+			 * @brief create global data node with different data source
+			 * 
+			 * @param V Value corresponding the global value
+			 * @param seq A sequence of skipped node
+			 * @return DFGNode* a pointer to the node
+			 */
+			inline DFGNode* make_global_node(Value *V, SmallVector<Value*>* seq) {
+				return new GlobalDataNode(V, seq);
+			}
+
 			DFGPassBuilder *DPB;
 			DFGPassManager *DPM;
+			SmallVector<CGRADFG*> graph_list;
+
 
 	};
 

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  18-02-2022 18:10:42
-*    Last Modified: 19-02-2022 08:13:21
+*    Last Modified: 20-02-2022 04:20:52
 */
 #ifndef LoopDependencyAnalysis_H
 #define LoopDependencyAnalysis_H
@@ -63,7 +63,7 @@ namespace CGRAOmp {
 			 * @param use 
 			 * @param phi 
 			 */
-			LoopDependency(DepKind kind, Instruction* def, Value *init,
+			LoopDependency(DepKind kind, Value* def, Value *init,
 					PHINode *phi, int distance) : 
 				def(def), distance(distance), kind(kind), phi(phi),
 				init(init) {};
@@ -80,19 +80,30 @@ namespace CGRAOmp {
 			// 	return U == use;
 			// }
 
-			Instruction* getDef() {
+			Value* getDef() {
 				return def;
+			}
+
+			Instruction* getDefInst() {
+				return dyn_cast<Instruction>(def);
+			}
+
+			Value* getInit() {
+				return init;
 			}
 
 			PHINode* getPhi() {
 				return phi;
 			}
 
+			int getDistance() {
+				return distance;
+			}
 		
 		protected:
 			PHINode* phi;
 			DepKind kind;
-			Instruction *def;
+			Value *def;
 			Value *init;
 
 			int distance;
@@ -121,14 +132,27 @@ namespace CGRAOmp {
 	*/
 	class MemoryLoopDependency : public LoopDependency {
 		public:
-			MemoryLoopDependency(StoreInst *def, LoadInst *use, int distance) :
-				LoopDependency(DepKind::Memory, def, nullptr, nullptr, distance) {};
-		
+			MemoryLoopDependency(StoreInst *store, LoadInst *load, int distance) :
+				LoopDependency(DepKind::Memory, store->getOperand(0),
+								 nullptr, nullptr, distance),
+				store(store), load(load) {};
+
+			
+			LoadInst *getLoad() {
+				return load;
+			}
+
+			StoreInst *getStore() {
+				return store;
+			}
+
 			static bool classof(const LoopDependency* LD) {
 				return LD->getKind() == LoopDependency::DepKind::Memory;
 			}
 		private:
-			LoadInst *use;
+			LoadInst *load;
+			StoreInst *store;
+
 	};
 
 	/**

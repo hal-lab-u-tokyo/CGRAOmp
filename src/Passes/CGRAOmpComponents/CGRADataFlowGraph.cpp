@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 18-02-2022 07:36:40
+*    Last Modified: 20-02-2022 02:34:03
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -66,30 +66,26 @@ string ConstantNode::getConstStr() const
 			);
 		}
 	} else {
-		return formatv("{0}=\"Value({1})\"", type_str, data_src->getName());
+		return formatv("{0}=\"Value({1})\"", type_str, data_src->getNameOrAsOperand());
 	}
 	return "";
 }
 
 string ConstantNode::getNodeAttr() const {
-	string str = "";
-	if (skip_seq) {
-		SmallVector<string> opcode_vec;
-		for (auto it = ++(skip_seq->rbegin()); it != skip_seq->rend(); it++) {
-			if (auto inst = dyn_cast<Instruction>(*it)) {
-				opcode_vec.emplace_back(inst->getOpcodeName());
-			} else {
-				LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX
-							<< " Unexpected skip instruction: ";
-							(*it)->print(dbgs());
-							dbgs() << "\n"
-				);
-			}
-		}
-		str = formatv("skipped=\"({0})\",", make_range(opcode_vec.begin(), opcode_vec.end()));
-	} 
+	return formatv("type=const,{0}{1}", getSkipSeq(), getConstStr());
+}
 
-	return formatv("type=const,{0}{1}", str, getConstStr());
+
+string GlobalDataNode::getDataStr() const
+ {
+	Value* data_src = (skip_seq) ? skip_seq->back() : val;
+	auto type_str = getTypeName(data_src->getType());
+	return formatv("{0}=\"Value({1})\"", type_str, data_src->getNameOrAsOperand());
+}
+
+string GlobalDataNode::getNodeAttr() const {
+	
+	return formatv("type=const,{0}{1}", getSkipSeq(), getDataStr());
 }
 
 

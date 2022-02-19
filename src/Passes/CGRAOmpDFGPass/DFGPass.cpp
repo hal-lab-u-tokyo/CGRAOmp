@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 18-02-2022 04:19:44
+*    Last Modified: 20-02-2022 04:23:30
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -49,6 +49,7 @@
 #include "CGRADataFlowGraph.hpp"
 #include "OptionPlugin.hpp"
 #include "DecoupledAnalysis.hpp"
+#include "LoopDependencyAnalysis.hpp"
 
 #include "BalanceTree.hpp"
 
@@ -178,30 +179,81 @@ PreservedAnalyses DFGPassHandler::run(Module &M, ModuleAnalysisManager &AM)
 {
 	auto &MM = AM.getResult<ModelManagerPass>(M);
 	auto model = MM.getModel();
+	auto module_name = llvm::sys::path::stem(M.getSourceFileName());
+	// get parent directory path
+	auto parent = llvm::sys::path::parent_path(M.getSourceFileName());
+	if (parent == "") {
+		// under current dir
+		parent = ".";
+	}
 
 	// obtain OpenMP kernels
 	auto &kernel_info = AM.getResult<OmpKernelAnalysisPass>(M);
+	auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 
 	// verify each OpenMP kernel
 	for (auto F : kernel_info.kernels()) {
 		//verify OpenMP target function
-		auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 		switch(model->getKind()) {
 			case CGRAModel::CGRACategory::Decoupled:
 				createDataFlowGraphsForAllKernels<DecoupledVerifyPass>(*F, FAM);
 				break;
 			case CGRAModel::CGRACategory::TimeMultiplexed:
-				assert("not implemented now");
+				createDataFlowGraphsForAllKernels<TimeMultiplexedVerifyPass>(*F, FAM);
 				break;
 		}
 	}
+	
+	// Optimize and export each generated DFG
+	for (auto G : graphs()) {
+		auto F = G->getFunction();
+		auto L = G->getLoop();
+		auto AR = getLSAR(*F, FAM);
+		auto &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(*F).getManager();
 
+		// apply DFG Passes
+		DPM->run(*G, *L, FAM, LAM, AR);
+
+		// use plain node name istread of pointer values
+		if (OptDFGPlainNodeName) {
+			G->makeSequentialNodeID();
+		}
+
+		// determine export name
+		std::string fname, label;
+		auto offload_func = kernel_info.getOffloadFunction(F);
+		auto md = kernel_info.getMetadata(offload_func);
+		
+		if (OptUseSimpleDFGName && md != kernel_info.md_end()) {
+			// use original function name instead of offloading function name
+			label = formatv("{0}_{1}", module_name, md->func_name);
+		} else {
+			label = formatv("{0}_{1}", module_name, offload_func->getName());
+		}
+
+		if (OptDFGFilePrefix != "") {
+			fname = formatv("{0}_{1}_{2}.dot", OptDFGFilePrefix, label, L->getName());
+		} else {
+
+			fname = formatv("{0}/{1}_{2}.dot", parent, label, L->getName());
+		}
+		G->setName(label);
+
+		LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Saving DFG: " << fname << "\n");
+		// save
+		Error E = G->saveAsDotGraph(fname);
+		if (E) {
+			ExitOnError Exit(ERR_MSG_PREFIX);
+			Exit(std::move(E));
+		}
+	}
+	
 	return PreservedAnalyses::all();
 }
 
 
 template<typename VerifyPassT>
-bool DFGPassHandler::createDataFlowGraphsForAllKernels(Function &F, FunctionAnalysisManager &AM)
+void DFGPassHandler::createDataFlowGraphsForAllKernels(Function &F, FunctionAnalysisManager &AM)
 {
 	VerifyResult& verify_result = AM.getResult<VerifyPassT>(F);
 	auto AR = getLSAR(F, AM);
@@ -218,11 +270,13 @@ bool DFGPassHandler::createDataFlowGraphsForAllKernels(Function &F, FunctionAnal
 	for (auto L : verify_result.kernels()) {
 		createDataFlowGraph<VerifyPassT>(F, *L, AM, LAM, AR);
 	}
-	return false;
 }
 
-template<typename VerifyPassT>
-bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager &FAM,
+
+
+// actual implementation for decoupled CGRA
+template<>
+void DFGPassHandler::createDataFlowGraph<DecoupledVerifyPass>(Function &F, Loop &L, FunctionAnalysisManager &FAM,
 									LoopAnalysisManager &LAM,
 									LoopStandardAnalysisResults &AR)
 {
@@ -232,27 +286,23 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	auto &MM = FAM.getResult<ModelManagerFunctionProxy>(F);
 	auto *model = MM.getModel();
 
-	auto &MAMProxy = FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F);
-	auto &M = *(F.getParent());
-	auto *kernel_info = MAMProxy.getCachedResult<OmpKernelAnalysisPass>(M);
-	assert(kernel_info && "OmpKernelAnalysisiPass must be executed before DFGPass");
 
 	DenseMap<Value*,DFGNode*> value_to_node;
 	SmallPtrSet<User*, 32> custom_op;
 	ValueMap<Value*, Value*> invars_src;
 
-	CGRADFG G;
+	auto G = new CGRADFG(&F, &L);
 
 	// add memory load
 	for (auto inst : DA.get_loads()) {
 		auto NewNode = make_mem_node(*inst);
-		NewNode = G.addNode(*NewNode);
+		NewNode = G->addNode(*NewNode);
 		value_to_node[inst] = NewNode;
 	}
 	// add memory store
 	for (auto inst : DA.get_stores()) {
 		auto NewNode = make_mem_node(*inst);
-		NewNode = G.addNode(*NewNode);
+		NewNode = G->addNode(*NewNode);
 		value_to_node[inst] = NewNode;
 	}
 
@@ -262,7 +312,7 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 			if (auto *imap = model->isSupported(inst)) {
 				// if (auto binop = dyn_cast<BinaryOpMapEntry>(imap)) {
 				auto NewNode = make_comp_node(inst, imap->getMapName());
-				NewNode = G.addNode(*NewNode);
+				NewNode = G->addNode(*NewNode);
 				value_to_node[inst] = NewNode;
 
 				if (auto customop = dyn_cast<CustomInstMapEntry>(imap)) {
@@ -298,7 +348,7 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 			invars_src[val] = val;
 			NewNode = make_const_node(val);
 		}
-		NewNode = G.addNode(*NewNode);
+		NewNode = G->addNode(*NewNode);
 		value_to_node[val] = NewNode;
 	}
 
@@ -310,7 +360,7 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 
 			if (src) {
 				auto NewEdge = new DFGEdge(*dst, i);
-				assert(G.connect(*src, *dst, *NewEdge) && "Trying to connect non-exist nodes");
+				assert(G->connect(*src, *dst, *NewEdge) && "Trying to connect non-exist nodes");
 			} else {
 				LLVM_DEBUG(
 					operand->print(dbgs() << ERR_DEBUG_PREFIX 
@@ -332,47 +382,235 @@ bool DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		connect(inst, inst->getNumOperands() - 1);
 	}
 
+	addGraph(G);
+}
 
-	if (OptDFGPlainNodeName) {
-		G.makeSequentialNodeID();
+
+// actual implementation for time-multiplexed CGRA
+template<typename VerifyPassT>
+void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisManager &FAM,
+									LoopAnalysisManager &LAM,
+									LoopStandardAnalysisResults &AR)
+{
+	//get the CGRA model
+	auto &MM = FAM.getResult<ModelManagerFunctionProxy>(F);
+	auto *model = MM.getModel();
+
+	VerifyResult& verify_result = FAM.getResult<TimeMultiplexedVerifyPass>(F);
+	LoopVerifyResult* LVR = verify_result.getLoopVerifyResult(&L);
+	assert(LVR && "Failed to get loop verify result");
+
+	DenseMap<Value*,DFGNode*> value_to_node;
+
+	// to check whether the node exists or not
+	auto is_node_exist = [&](Value *V) {
+		return value_to_node.find(V) != value_to_node.end();
+	};
+
+	SmallPtrSet<User*, 32> custom_op;
+	DenseMap<Value*, MemoryLoopDependency*> memdep_map; 
+	SmallPtrSet<Instruction*, 32> kernel_inst;
+
+	auto G = new CGRADFG(&F, &L);
+
+	// inter-loop dependency 
+	auto LD = LAM.getResult<LoopDependencyAnalysisPass>(L, AR);
+
+	DenseMap<PHINode*, LoopDependency*> idv_phis, lc_dep_phis;
+
+	// get all induction variable
+	for (auto idv_dep : LD.idv_deps()) {
+		idv_phis[idv_dep->getPhi()] = idv_dep;
+	}
+	// get all loop carried delepdency
+	for (auto lc_dep : LD.lc_deps()) {
+		lc_dep_phis[lc_dep->getPhi()] = lc_dep;
 	}
 
 
-	// apply tree height reduction if needed
-	DPM->run(G, L, FAM, LAM, AR);
-
-	// determine export name
-	std::string fname, label;
-	auto offload_func = kernel_info->getOffloadFunction(&F);
-	auto md = kernel_info->getMetadata(offload_func);
-	auto module_name = llvm::sys::path::stem(F.getParent()->getSourceFileName());
-
-	if (OptUseSimpleDFGName && md != kernel_info->md_end()) {
-		// use original function name instead of offloading function name
-		label = formatv("{0}_{1}", module_name, md->func_name);
-	} else {
-		label = formatv("{0}_{1}", module_name, offload_func->getName());
-	}
-
-	if (OptDFGFilePrefix != "") {
-		fname = formatv("{0}_{1}_{2}.dot", OptDFGFilePrefix, label, L.getName());
-	} else {
-		auto parent = llvm::sys::path::parent_path(F.getParent()->getSourceFileName());
-		if (parent == "") {
-			parent = ".";
+	auto phi_contained = [](DenseMap<PHINode*, LoopDependency*> &M, PHINode* phi) -> LoopDependency* {
+		if (M.find(phi) != M.end()) {
+			return M[phi];
+		} else {
+			return nullptr;
 		}
-		fname = formatv("{0}/{1}_{2}.dot", parent, label, L.getName());
-	}
-	G.setName(label);
+	};
 
-	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Saving DFG: " << fname << "\n");
-	Error E = G.saveAsDotGraph(fname);
-	if (E) {
-		ExitOnError Exit(ERR_MSG_PREFIX);
-		Exit(std::move(E));
+	auto is_memdep = [&](Value *operand) {
+		return memdep_map.find(operand) != memdep_map.end();
+	};
+	
+	SmallPtrSet<BasicBlock*, 32> all_blocks(L.block_begin(), L.block_end());
+
+	Instruction* BackBranch = LVR->getBackBranch(&L);
+	Instruction* LoopCond = LVR->getBackCondition(&L);
+
+
+	// make a node for each instruction in the kernel
+	SmallPtrSet<GetElementPtrInst*, 32> gep_set;
+
+	for (auto &BB : all_blocks) {
+		for (auto &I : *BB) {
+			Instruction* inst = &I;
+			// check if it is special instruction like phi, branch of loop control
+			if (auto phi = dyn_cast<PHINode>(inst)) {
+				if (phi_contained(idv_phis, phi) || phi_contained(lc_dep_phis, phi)) {
+					continue;
+				}
+			} else if (auto gep = dyn_cast<GetElementPtrInst>(inst)) {
+				gep_set.insert(gep);
+				gep->dump();
+				int i = 0;
+				for (auto &indice : gep->indices()) {
+					errs() << i++ << " ";
+					indice.get()->dump();
+				}
+				continue;
+			} else if (inst == BackBranch || inst == LoopCond) {
+				continue;
+			}
+
+			if (auto *imap = model->isSupported(inst)) {
+				auto NewNode = make_comp_node(inst, imap->getMapName());
+				NewNode = G->addNode(*NewNode);
+				value_to_node[inst] = NewNode;
+				if (auto customop = dyn_cast<CustomInstMapEntry>(imap)) {
+					custom_op.insert(inst);
+				}
+				kernel_inst.insert(inst);
+			} else {
+				LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX 
+					<< "Unsupported instructions are included");
+				DEBUG_WITH_TYPE(VerboseDebug, 
+					inst->print(dbgs() << "\t");
+					dbgs() << "\n";
+				);
+			}
+		}
 	}
 
-	return true;
+
+	// find edges coming from outside of the loop or contants
+	for (auto sink : kernel_inst) {
+		for (auto *src : sink->operand_values()) {
+			if (auto src_inst = dyn_cast<Instruction>(src)) {
+				if (!all_blocks.contains(src_inst->getParent())) {
+					// data
+					auto NewNode = make_global_node(src_inst);
+					NewNode = G->addNode(*NewNode);
+					value_to_node[src_inst] = NewNode;
+				}
+			} else if (auto src_const = dyn_cast<Constant>(src)) {
+				auto NewNode = make_const_node(src_const);
+				NewNode = G->addNode(*NewNode);
+				value_to_node[src_const] = NewNode;
+			} else if (auto src_arg = dyn_cast<Argument>(src)) {
+				auto NewNode = make_const_node(src_arg);
+				NewNode = G->addNode(*NewNode);
+				value_to_node[src_arg] = NewNode;
+			} else {
+				LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX 
+					<< "Incoming edge from unexpected element");
+				DEBUG_WITH_TYPE(VerboseDebug, 
+					src->print(dbgs() << "\t");
+					dbgs() << "\n";
+				);
+			}
+		}
+	}
+
+	// if it is self-dependent, use LoopDependencyEdge
+	auto connect_to_loop_dep_node = [&,this](LoopDependency *dep, PHINode* phi) {
+		Instruction* I = dep->getDefInst();
+		DFGNode* self = value_to_node[I];
+		int last_operand = I->getNumOperands();
+		if (custom_op.contains(I)) last_operand--;
+		for (int i = 0; i < last_operand; i++) {
+			auto operand = I->getOperand(i);
+			if (operand == phi) {
+				auto NewEdge = new LoopDependencyEdge(*self, i, dep->getDistance());
+				assert(G->connect(*self, *self, *NewEdge) && "Trying to connect non-exist nodes");
+				// other instructions refer this instruction instead of the phi node
+				value_to_node[phi] = self;
+				// also making init edge
+				auto init_data = dep->getInit();
+				DFGNode* InitNode;
+				if (!is_node_exist(init_data)) {
+					if (isa<Constant>(*init_data) || isa<Argument>((*init_data))) {
+						InitNode = make_const_node(init_data);
+						value_to_node[init_data] = InitNode;
+						InitNode = G->addNode(*InitNode);
+					} else {
+						InitNode = make_global_node(init_data);
+						value_to_node[init_data] = InitNode;
+						InitNode = G->addNode(*InitNode);
+					}
+				} else {
+					InitNode = value_to_node[init_data];
+				}
+				auto InitEdge = new InitDataEdge(*self, i);
+				assert(G->connect(*InitNode, *self, *InitEdge) && "Trying to connect non-exist nodes");
+			} else {
+				DFGNode* src = value_to_node[operand];
+				auto NewEdge = new DFGEdge(*self, i);
+				assert(G->connect(*src, *self, *NewEdge) && "Trying to connect non-exist nodes");
+			}
+		}
+	};
+
+	// get memory dependency
+	for (auto dep : LD.mem_deps()) {
+		auto mem_dep = static_cast<MemoryLoopDependency*>(dep);
+		auto load = mem_dep->getLoad();
+		memdep_map[load] = mem_dep;
+	}
+
+	// make connection for induction variables
+	for (auto item : idv_phis) {
+		auto phi = item.first;
+		auto dep = item.second;
+		connect_to_loop_dep_node(dep, phi);
+		kernel_inst.erase(dep->getDefInst());
+	}
+
+	// make connection for inter-loop dependecies
+	for (auto item : lc_dep_phis) {
+		auto phi = item.first;
+		auto dep = item.second;
+		connect_to_loop_dep_node(dep, phi);
+		kernel_inst.erase(dep->getDefInst());
+	}
+
+	// make connections for intra-loop dependencies
+	for (auto inst : kernel_inst) {
+		DFGNode* dst = value_to_node[inst];
+		int last_operand = inst->getNumOperands();
+		if (custom_op.contains(inst)) last_operand--;
+		for (int i = 0; i < last_operand; i++) {
+			auto operand = inst->getOperand(i);
+			DFGEdge *NewEdge;
+			if (is_memdep(operand)) {
+				errs() << "operand is mem dep\n";
+				// connect to def node instead of memory load
+				auto memdep = memdep_map[operand];
+				operand = memdep->getDef();
+				NewEdge = new LoopDependencyEdge(*dst, i, memdep->getDistance());
+			} else {
+				NewEdge = new DFGEdge(*dst, i);
+			}
+			if (is_node_exist(operand)) {
+				DFGNode* src = value_to_node[operand];
+				assert(G->connect(*src, *dst, *NewEdge) && "Trying to connect non-exist nodes");
+			} else {
+				operand->print(errs() << "not exist ");
+				errs() << "\n";
+			}
+		}
+	}
+
+
+
+	addGraph(G);
 }
 
 

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 19-02-2022 08:40:25
+*    Last Modified: 19-02-2022 18:54:57
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -185,6 +185,26 @@ namespace CGRAOmp {
 				each_result[static_cast<int>(R->getKind())] = R;
 			}
 
+			BranchInst* getBackBranch(Loop* L) {
+				if (back_branch_list.find(L) != back_branch_list.end()) {
+					return back_branch_list[L];
+				} else {
+					return nullptr;
+				}
+			}
+
+			CmpInst* getBackCondition(Loop *L) {
+				if (auto back = getBackBranch(L)) {
+					return dyn_cast<CmpInst>(back->getCondition());
+				} else {
+					return nullptr;
+				}
+			}
+
+			void setBackBranch(Loop*L, BranchInst* B) {
+				back_branch_list[L] = B;
+			}
+
 		private:
 			DenseMap<int, VerifyResultBase*> each_result;
 
@@ -195,6 +215,9 @@ namespace CGRAOmp {
 			 * @return false if there is some violation in a kind of rule
 			 */
 			bool bool_operator_impl() override;
+
+			DenseMap<Loop*,BranchInst*> back_branch_list;
+
 	};
 
 	/**
@@ -236,6 +259,14 @@ namespace CGRAOmp {
 			}
 			static bool classof(const VerifyResultBase* R) {
 				return R->getKind() == VerificationKind::FunctionSummary;
+			}
+
+			LoopVerifyResult* getLoopVerifyResult(Loop* L) {
+				if (loop_verify_results.find(L) != loop_verify_results.end()) {
+					return &loop_verify_results[L];
+				} else {
+					return nullptr;
+				}
 			}
 
 
@@ -298,7 +329,8 @@ namespace CGRAOmp {
 	 * @class TimeMultiplexedVerifyPass
 	 * @brief A function pass to verify the kernel for TimeMultiplexed CGRA
 	*/
-	class TimeMultiplexedVerifyPass : public AnalysisInfoMixin<TimeMultiplexedVerifyPass> {
+	class TimeMultiplexedVerifyPass : 
+			public VerifyPassBase<TimeMultiplexedVerifyPass> {
 		public:
 			using Result = VerifyResult;
 			Result run(Function &F, FunctionAnalysisManager &AM);
@@ -457,6 +489,9 @@ namespace CGRAOmp {
 								FunctionAnalysisManager &AM);
 
 
+	BranchInst* findBackBranch(Loop *L);
+
+	void getAllGEP(Loop* L, SmallVector<Instruction*> &List);
 }
 
 #endif //VerifyPass_H
