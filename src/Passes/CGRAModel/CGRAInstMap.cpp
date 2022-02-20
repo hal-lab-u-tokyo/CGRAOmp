@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 17-02-2022 23:33:40
+*    Last Modified: 20-02-2022 08:45:16
 */
 
 
@@ -298,8 +298,9 @@ StringMap<InstMap::entry_generator> InstMap::entry_gen({
 	BINOP_ENTRY("or", Or), BINOP_ENTRY("xor", Xor),
 	COMPOP_ENTRY("icmp", true), COMPOP_ENTRY("fcmp", false),
 	MEMOP_ENTRY("load", Load), MEMOP_ENTRY("store", Store),
-	OTHEROP_ENTRY("select", Instruction::OtherOps::Select),
+	OTHEROP_ENTRY("select", Instruction::OtherOps::Select)
 });
+
 
 InstMapEntry* InstMap::find(StringRef opcode)
 {
@@ -371,8 +372,6 @@ bool CompOpMapEntry::match(Instruction *I)
 /* ================== Implementation of OtherOpMapEntry ================== */
 bool OtherOpMapEntry::match(Instruction *I)
 {
-
-	auto hoge = dyn_cast<BranchInst>(I);
 
 	switch (cat) {
 		case OptCategory::Terminator:

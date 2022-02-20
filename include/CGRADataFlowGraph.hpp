@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 20-02-2022 01:21:02
+*    Last Modified: 20-02-2022 20:13:12
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -252,23 +252,36 @@ namespace llvm {
 		protected:
 
 			string getTypeName(Type* ty) const {
-				switch (ty->getTypeID()) {
+				Type *ele_ty = ty;
+				string format_str = "{0}", type_str;
+
+				if (ty->isPointerTy()) {
+					ele_ty = ty->getPointerElementType();
+					format_str = "address<{0}>";
+				}
+				if (ele_ty->isArrayTy()) {
+					ele_ty = ele_ty->getArrayElementType();
+				}
+
+				switch (ele_ty->getTypeID()) {
 					case Type::BFloatTyID:
-						return "float16";
+						type_str = "float16"; break;
 					case Type::FloatTyID:
-						return "float32";
+						type_str = "float32"; break;
 					case Type::DoubleTyID:
-						return "float64";
+						type_str = "float64"; break;
 					case Type::FP128TyID:
-						return "float128";
+						type_str = "float128"; break;
 					case Type::IntegerTyID:
 					{
-						auto intty = dyn_cast<IntegerType>(ty);
-						return formatv("int{0}", intty->getBitWidth());
-					}
+						auto intty = dyn_cast<IntegerType>(ele_ty);
+						type_str = formatv("int{0}", intty->getBitWidth());
+					} break;
 					default:
 						return "unknown";
 				}
+
+				return formatv(format_str.c_str(), type_str);
 			}
 
 			string getFloatType(APFloat f) const {
@@ -363,7 +376,39 @@ namespace llvm {
 
 
 
+	class GEPAddNode : public DFGNode {
+		public:
+			GEPAddNode(GetElementPtrInst *gep) : 
+				DFGNode(DFGNode::NodeKind::Compute, gep), opcode("add") {}
 
+			string getUniqueName() const {
+				return opcode + "_" + to_string(getID());
+			}
+			string getNodeAttr() const {
+				return formatv("type=op,{0}={1}", OptDFGOpKey, opcode);
+			}
+			static bool classof(const DFGNode* N) {
+				return N->getKind() == NodeKind::Compute;
+			}
+			Instruction* getInst() const {
+				return dyn_cast<Instruction>(val);
+			}
+		private:
+			std::string opcode;
+	};
+
+	class GEPMultNode : public DFGNode {
+		public:
+			
+		private:
+
+	};
+
+	// class GEPPtrNode : public GlobalDataNode {
+	// 	public:
+	// 		explicit GEPPtrNode(Value* V) : GlobalDataNode(V) {};
+	// 	private:
+	// };
 
 
 	/**

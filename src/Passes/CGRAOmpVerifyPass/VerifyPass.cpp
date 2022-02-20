@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 19-02-2022 19:51:42
+*    Last Modified: 20-02-2022 07:45:25
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -502,5 +502,18 @@ void CGRAOmp::getAllGEP(Loop* L, SmallVector<Instruction*> &List)
 		}
 	}
 
+}
+
+SmallVector<int> CGRAOmp::getArrayElementSizes(Type *Ty)
+{
+	SmallVector<int> sizes;
+
+	Type* current_type = Ty;
+	while (auto arr_type = dyn_cast<ArrayType>(current_type)) {
+		sizes.emplace_back(arr_type->getNumElements());
+		current_type = arr_type->getElementType();
+	}
+
+	return std::move(sizes);
 }
 #undef DEBUG_TYPE

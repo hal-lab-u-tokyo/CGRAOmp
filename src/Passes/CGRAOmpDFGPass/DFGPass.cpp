@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 20-02-2022 04:23:30
+*    Last Modified: 20-02-2022 18:29:22
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -396,27 +396,31 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	auto &MM = FAM.getResult<ModelManagerFunctionProxy>(F);
 	auto *model = MM.getModel();
 
+	// get verification result
 	VerifyResult& verify_result = FAM.getResult<TimeMultiplexedVerifyPass>(F);
 	LoopVerifyResult* LVR = verify_result.getLoopVerifyResult(&L);
 	assert(LVR && "Failed to get loop verify result");
 
-	DenseMap<Value*,DFGNode*> value_to_node;
+	// collections
+	DenseMap<Value*,DFGNode*> value_to_node; // map to Value -> DFGNode
+	SmallPtrSet<User*, 32> custom_op;
+	DenseMap<Value*, MemoryLoopDependency*> memdep_map;
+	SmallPtrSet<Instruction*, 32> kernel_inst;
+	DenseMap<PHINode*, LoopDependency*> idv_phis, lc_dep_phis;
+	SmallPtrSet<BasicBlock*, 32> all_blocks(L.block_begin(), L.block_end());
+	SmallPtrSet<GetElementPtrInst*, 32> gep_set;
 
 	// to check whether the node exists or not
 	auto is_node_exist = [&](Value *V) {
 		return value_to_node.find(V) != value_to_node.end();
 	};
 
-	SmallPtrSet<User*, 32> custom_op;
-	DenseMap<Value*, MemoryLoopDependency*> memdep_map; 
-	SmallPtrSet<Instruction*, 32> kernel_inst;
-
+	// instance of the graph
 	auto G = new CGRADFG(&F, &L);
 
-	// inter-loop dependency 
+	// get loop dependency info
 	auto LD = LAM.getResult<LoopDependencyAnalysisPass>(L, AR);
-
-	DenseMap<PHINode*, LoopDependency*> idv_phis, lc_dep_phis;
+	
 
 	// get all induction variable
 	for (auto idv_dep : LD.idv_deps()) {
@@ -427,7 +431,8 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		lc_dep_phis[lc_dep->getPhi()] = lc_dep;
 	}
 
-
+	// lambdas
+	// to check the phinode is associated with loop dependency
 	auto phi_contained = [](DenseMap<PHINode*, LoopDependency*> &M, PHINode* phi) -> LoopDependency* {
 		if (M.find(phi) != M.end()) {
 			return M[phi];
@@ -436,19 +441,17 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		}
 	};
 
-	auto is_memdep = [&](Value *operand) {
-		return memdep_map.find(operand) != memdep_map.end();
+	// to check the loaded value depends on the stored value in a previous iteration
+	auto is_memdep = [&](Value *load) {
+		return memdep_map.find(load) != memdep_map.end();
 	};
 	
-	SmallPtrSet<BasicBlock*, 32> all_blocks(L.block_begin(), L.block_end());
-
+	// get instructions for loop control
 	Instruction* BackBranch = LVR->getBackBranch(&L);
 	Instruction* LoopCond = LVR->getBackCondition(&L);
 
 
 	// make a node for each instruction in the kernel
-	SmallPtrSet<GetElementPtrInst*, 32> gep_set;
-
 	for (auto &BB : all_blocks) {
 		for (auto &I : *BB) {
 			Instruction* inst = &I;
@@ -459,12 +462,6 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 				}
 			} else if (auto gep = dyn_cast<GetElementPtrInst>(inst)) {
 				gep_set.insert(gep);
-				gep->dump();
-				int i = 0;
-				for (auto &indice : gep->indices()) {
-					errs() << i++ << " ";
-					indice.get()->dump();
-				}
 				continue;
 			} else if (inst == BackBranch || inst == LoopCond) {
 				continue;
@@ -489,23 +486,24 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		}
 	}
 
-
 	// find edges coming from outside of the loop or contants
 	for (auto sink : kernel_inst) {
 		for (auto *src : sink->operand_values()) {
 			if (auto src_inst = dyn_cast<Instruction>(src)) {
 				if (!all_blocks.contains(src_inst->getParent())) {
-					// data
+					// global data
 					auto NewNode = make_global_node(src_inst);
 					NewNode = G->addNode(*NewNode);
 					value_to_node[src_inst] = NewNode;
 				}
 			} else if (auto src_const = dyn_cast<Constant>(src)) {
+				// constant data
 				auto NewNode = make_const_node(src_const);
 				NewNode = G->addNode(*NewNode);
 				value_to_node[src_const] = NewNode;
 			} else if (auto src_arg = dyn_cast<Argument>(src)) {
-				auto NewNode = make_const_node(src_arg);
+				// argument is also global
+				auto NewNode = make_global_node(src_arg);
 				NewNode = G->addNode(*NewNode);
 				value_to_node[src_arg] = NewNode;
 			} else {
@@ -519,24 +517,29 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		}
 	}
 
-	// if it is self-dependent, use LoopDependencyEdge
+	// common routing to make connection for inter-loop dependency
+	// Args:
+	//    dep: LoopDependency (which contains def and use instruction, init data, etc)
+	//    phi: PhiNode to select either init data or data from previous iteration
 	auto connect_to_loop_dep_node = [&,this](LoopDependency *dep, PHINode* phi) {
 		Instruction* I = dep->getDefInst();
 		DFGNode* self = value_to_node[I];
 		int last_operand = I->getNumOperands();
-		if (custom_op.contains(I)) last_operand--;
+
+		if (custom_op.contains(I)) last_operand--; // the last is function to be called
 		for (int i = 0; i < last_operand; i++) {
 			auto operand = I->getOperand(i);
 			if (operand == phi) {
+				// if it depends on itself, connects to def instruction
 				auto NewEdge = new LoopDependencyEdge(*self, i, dep->getDistance());
 				assert(G->connect(*self, *self, *NewEdge) && "Trying to connect non-exist nodes");
-				// other instructions refer this instruction instead of the phi node
+				// making other instructions refer this instruction instead of the phi node
 				value_to_node[phi] = self;
 				// also making init edge
 				auto init_data = dep->getInit();
 				DFGNode* InitNode;
 				if (!is_node_exist(init_data)) {
-					if (isa<Constant>(*init_data) || isa<Argument>((*init_data))) {
+					if (isa<Constant>(*init_data)) {
 						InitNode = make_const_node(init_data);
 						value_to_node[init_data] = InitNode;
 						InitNode = G->addNode(*InitNode);
@@ -551,6 +554,7 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 				auto InitEdge = new InitDataEdge(*self, i);
 				assert(G->connect(*InitNode, *self, *InitEdge) && "Trying to connect non-exist nodes");
 			} else {
+				// the operand is intra-loop dependency, so create normal edges
 				DFGNode* src = value_to_node[operand];
 				auto NewEdge = new DFGEdge(*self, i);
 				assert(G->connect(*src, *self, *NewEdge) && "Trying to connect non-exist nodes");
@@ -581,7 +585,52 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		kernel_inst.erase(dep->getDefInst());
 	}
 
-	// make connections for intra-loop dependencies
+	// make data-flow for GEP instructions
+	// Note: it assumes continuous memory allocation for multidimensional array 
+	for (auto gep : gep_set) {
+		auto ptr = gep->getPointerOperand();
+		auto sizes = getArrayElementSizes(gep->getSourceElementType());
+		SmallVector<int> inc;
+		for (auto i = sizes.rbegin(); i != sizes.rend(); i++) {
+			int total = 1;
+			for (auto j = sizes.rbegin(); j <= i; j++) {
+				total *= *j;
+			}
+			inc.insert(inc.begin(), total);
+		}
+		inc.emplace_back(1);
+
+		DFGNode *base_addr;
+		if (!is_node_exist(ptr)) {
+			base_addr = new GlobalDataNode(ptr);
+			base_addr = G->addNode(*base_addr);
+			value_to_node[ptr] = base_addr;
+		} else {
+			base_addr = value_to_node[ptr];
+		}
+
+		int i = 0;
+		DFGNode* last = nullptr;
+		for (auto idx = gep->idx_begin(); idx != gep->idx_end(); idx++) {
+			if (auto inst_indice = dyn_cast<Instruction>(idx)) {
+				if (all_blocks.contains(inst_indice->getParent())) {
+					auto indice_node = value_to_node[inst_indice];
+					DFGNode* add = new GEPAddNode(gep);
+					add = G->addNode(*add);
+					DFGEdge* NewEdge = new DFGEdge(*add);
+					assert(G->connect(*indice_node, *add, *NewEdge) && "Trying to connect non-exist nodes");
+					NewEdge = new DFGEdge(*add);
+					assert(G->connect(*base_addr, *add, *NewEdge) && "Trying to connect non-exist nodes");
+					last = add;
+				}
+			}
+		}
+		if (last) {
+			value_to_node[gep] = last;
+		}
+	} 
+
+	// make connections for remaining nodes
 	for (auto inst : kernel_inst) {
 		DFGNode* dst = value_to_node[inst];
 		int last_operand = inst->getNumOperands();
@@ -590,11 +639,16 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 			auto operand = inst->getOperand(i);
 			DFGEdge *NewEdge;
 			if (is_memdep(operand)) {
-				errs() << "operand is mem dep\n";
+				// connect mem load for init edges
+				auto InitEdge = new InitDataEdge(*dst, i);
+				G->connect(*(value_to_node[operand]), *dst, *InitEdge);
+
 				// connect to def node instead of memory load
 				auto memdep = memdep_map[operand];
 				operand = memdep->getDef();
 				NewEdge = new LoopDependencyEdge(*dst, i, memdep->getDistance());
+				
+
 			} else {
 				NewEdge = new DFGEdge(*dst, i);
 			}

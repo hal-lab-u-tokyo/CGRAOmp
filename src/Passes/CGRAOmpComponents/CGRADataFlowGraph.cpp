@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 20-02-2022 02:34:03
+*    Last Modified: 20-02-2022 20:12:18
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -52,13 +52,15 @@ string ConstantNode::getConstStr() const
 
 	Value* data_src = (skip_seq) ? skip_seq->back() : val;
 	auto type_str = getTypeName(data_src->getType());
+	const char* fmt = "datatype=\"{0}\",value=\"{1}\"";
+
 	if (Constant* const_value = dyn_cast<Constant>(data_src)) {
 		if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
-			return formatv("{0}={1}", type_str, cint->getSExtValue());
+			return formatv(fmt, type_str, cint->getSExtValue());
 		} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
 			auto apf = cfloat->getValueAPF();
 			float f = apf.convertToFloat();
-			return formatv("{0}={1}", type_str, f);
+			return formatv(fmt, type_str, f);
 		} else {
 			LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << " Unexpected constant type: ";
 						const_value->print(dbgs());
@@ -66,7 +68,7 @@ string ConstantNode::getConstStr() const
 			);
 		}
 	} else {
-		return formatv("{0}=\"Value({1})\"", type_str, data_src->getNameOrAsOperand());
+		return formatv(fmt, type_str, data_src->getNameOrAsOperand());
 	}
 	return "";
 }
@@ -80,7 +82,7 @@ string GlobalDataNode::getDataStr() const
  {
 	Value* data_src = (skip_seq) ? skip_seq->back() : val;
 	auto type_str = getTypeName(data_src->getType());
-	return formatv("{0}=\"Value({1})\"", type_str, data_src->getNameOrAsOperand());
+	return formatv("datatype=\"{0}\",value=\"{1}\"", type_str, data_src->getNameOrAsOperand());
 }
 
 string GlobalDataNode::getNodeAttr() const {
