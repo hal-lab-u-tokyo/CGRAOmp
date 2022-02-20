@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 20-02-2022 18:29:22
+*    Last Modified: 21-02-2022 06:03:36
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -50,6 +50,7 @@
 #include "OptionPlugin.hpp"
 #include "DecoupledAnalysis.hpp"
 #include "LoopDependencyAnalysis.hpp"
+#include "AGVerifyPass.hpp"
 
 #include "BalanceTree.hpp"
 
@@ -234,8 +235,7 @@ PreservedAnalyses DFGPassHandler::run(Module &M, ModuleAnalysisManager &AM)
 		if (OptDFGFilePrefix != "") {
 			fname = formatv("{0}_{1}_{2}.dot", OptDFGFilePrefix, label, L->getName());
 		} else {
-
-			fname = formatv("{0}/{1}_{2}.dot", parent, label, L->getName());
+			fname = formatv("./{1}_{2}.dot", parent, label, L->getName());
 		}
 		G->setName(label);
 
@@ -246,6 +246,20 @@ PreservedAnalyses DFGPassHandler::run(Module &M, ModuleAnalysisManager &AM)
 			ExitOnError Exit(ERR_MSG_PREFIX);
 			Exit(std::move(E));
 		}
+
+		if (G->hasExtraInfo()) {
+			if (OptDFGFilePrefix != "") {
+				fname = formatv("{0}_{1}_{2}_extra.json", OptDFGFilePrefix, label, L->getName());
+			} else {
+				fname = formatv("./{1}_{2}_extra.json", parent, label, L->getName());
+			}
+			E = G->saveExtraInfo(fname);
+			if (E) {
+				ExitOnError Exit(ERR_MSG_PREFIX);
+				Exit(std::move(E));
+			}
+		}
+
 	}
 	
 	return PreservedAnalyses::all();
@@ -286,6 +300,10 @@ void DFGPassHandler::createDataFlowGraph<DecoupledVerifyPass>(Function &F, Loop 
 	auto &MM = FAM.getResult<ModelManagerFunctionProxy>(F);
 	auto *model = MM.getModel();
 
+	auto verify_result = FAM.getResult<DecoupledVerifyPass>(F);
+	auto loop_verify_result = verify_result.getLoopVerifyResult(&L);
+	auto ag_compat = dyn_cast<AGCompatibility>(loop_verify_result->getResult(VerificationKind::MemoryAccess));
+
 
 	DenseMap<Value*,DFGNode*> value_to_node;
 	SmallPtrSet<User*, 32> custom_op;
@@ -294,16 +312,19 @@ void DFGPassHandler::createDataFlowGraph<DecoupledVerifyPass>(Function &F, Loop 
 	auto G = new CGRADFG(&F, &L);
 
 	// add memory load
+	error_code EC;
 	for (auto inst : DA.get_loads()) {
 		auto NewNode = make_mem_node(*inst);
 		NewNode = G->addNode(*NewNode);
 		value_to_node[inst] = NewNode;
+		NewNode->setExtraInfo("AGConfig", ag_compat->getConfigAsJson(inst));
 	}
 	// add memory store
 	for (auto inst : DA.get_stores()) {
 		auto NewNode = make_mem_node(*inst);
 		NewNode = G->addNode(*NewNode);
 		value_to_node[inst] = NewNode;
+		NewNode->setExtraInfo("AGConfig", ag_compat->getConfigAsJson(inst));
 	}
 
 	// add comp node

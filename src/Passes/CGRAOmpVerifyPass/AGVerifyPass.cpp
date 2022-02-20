@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-02-2022 13:01:22
-*    Last Modified: 18-02-2022 19:40:07
+*    Last Modified: 21-02-2022 03:45:50
 */
 
 #include "AGVerifyPass.hpp"
@@ -45,8 +45,8 @@ static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
 // partial specilization for Affine AG
 template <>
-VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::Result
-VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>::run(Loop &L,
+VerifyAGCompatiblePass<AffineAGCompatibility>::Result
+VerifyAGCompatiblePass<AffineAGCompatibility>::run(Loop &L,
 	LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR)
 {
 	using llvm::SCEVTypes;
@@ -123,6 +123,24 @@ void AffineAGCompatibility::print(raw_ostream &OS) const
 		OS << formatv(" Valid? {0:T}: {1}\n", C.valid, make_range(tmp.begin(), tmp.end()));
 	}
 
+}
+
+llvm::json::Value AffineAGCompatibility::getConfigAsJson(Instruction *I) const
+{
+
+	auto config_value = config.find(I);
+	json::Array top;
+	if (config_value != config.end()) {
+		for (auto C : config_value->second.config) {
+			top.push_back(json::Object(
+				{{"start", json::Value(C.start)},
+				 {"step", json::Value(C.step)},
+				 {"count", json::Value(C.count)}}
+			));
+		}
+	}
+
+	return std::move(top);
 }
 
 /* ================= Utility functions ================= */

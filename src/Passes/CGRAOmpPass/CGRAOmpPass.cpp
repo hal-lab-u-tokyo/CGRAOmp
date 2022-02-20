@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 14-02-2022 10:36:26
+*    Last Modified: 21-02-2022 02:42:38
 */
 #include "common.hpp"
 #include "CGRAOmpPass.hpp"
@@ -275,6 +275,8 @@ bool OmpScheduleInfo::invalidate(Function &F, const PreservedAnalyses &PA,
 /* ================ Implementation of OmpStaticShecudleAnalysis ================= */
 AnalysisKey OmpStaticShecudleAnalysis::Key;
 
+#include "llvm/Analysis/MemorySSA.h"
+
 OmpStaticShecudleAnalysis::Result
 OmpStaticShecudleAnalysis::run(Function &F, FunctionAnalysisManager &AM)
 {
@@ -302,6 +304,8 @@ OmpStaticShecudleAnalysis::run(Function &F, FunctionAnalysisManager &AM)
 						DBG_DEBUG_PREFIX,
 						init_call->getCalledFunction()->getName(),
 						init_call->getNumArgOperands()));
+		MemorySSA *MSSA = &AM.getResult<MemorySSAAnalysis>(F).getMSSA();
+
 		OmpScheduleInfo info(
 			init_call->getOperand(OMP_STATIC_INIT_SCHED),
 			init_call->getOperand(OMP_STATIC_INIT_PLASTITER),
@@ -311,6 +315,8 @@ OmpStaticShecudleAnalysis::run(Function &F, FunctionAnalysisManager &AM)
 			init_call->getOperand(OMP_STATIC_INIT_INCR),
 			init_call->getOperand(OMP_STATIC_INIT_CHUNK)
 		);
+
+
 		return info;
 	} else {
 		OmpScheduleInfo invalid_info;
@@ -357,7 +363,7 @@ llvmGetPassPluginInfo() {
 			PB.registerPipelineParsingCallback(
 				[](StringRef Name, ModulePassManager &PM,
 					ArrayRef<PassBuilder::PipelineElement>){
-						if (Name == "cgraomp") {
+						if (Name == CGRAOMP_PASS_NAME) {
 							// make a pipeline
 							//PM.addPass(ADD_LOOP_PASS(LoopRotatePass()));
 							// PM.addPass(ADD_FUNC_PASS(LCSSAPass()));

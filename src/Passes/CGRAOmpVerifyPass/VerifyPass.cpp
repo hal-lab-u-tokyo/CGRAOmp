@@ -25,24 +25,24 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 20-02-2022 07:45:25
+*    Last Modified: 21-02-2022 03:06:47
 */
 
+#include "llvm/ADT/SetOperations.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
-#include "llvm/IR/Dominators.h"
+#include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/LoopNestAnalysis.h"
+#include "llvm/Analysis/LoopNestAnalysis.h"
+#include "llvm/Analysis/MemorySSA.h"
+#include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/Analysis/ScalarEvolution.h"
-#include "llvm/Analysis/BlockFrequencyInfo.h"
-#include "llvm/Analysis/MemorySSA.h"
-#include "llvm/Analysis/LoopNestAnalysis.h"
-#include "llvm/Support/Error.h"
-#include "llvm/ADT/SetOperations.h"
-
-#include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/IR/Dominators.h"
+#include "llvm/Support/Error.h"
 
 #include "common.hpp"
 #include "VerifyPass.hpp"
@@ -61,6 +61,16 @@ using namespace CGRAOmp;
 #define DEBUG_TYPE "cgraomp"
 
 static const char *VerboseDebug = DEBUG_TYPE "-verbose";
+
+STATISTIC(valid_kernels, "number of valid kernels");
+
+/* ================= Specialization for SimpleVerifyResult ================= */
+
+template<>
+const char* DecoupleAnalysisResult::name = "Memory access decoupling";
+template<>
+const char* InterLoopDependencyAnalysisResult::name = "Inter loop dependency";
+
 
 
 /* ================= Implementation of InstAvailability ================= */
@@ -172,6 +182,8 @@ VerifyResult TimeMultiplexedVerifyPass::run(Function &F, FunctionAnalysisManager
 				 << F.getName() << "for time-multiplexed CGRA\n");
 	VerifyResult result;
 
+
+
 	// get CGRA model
 	auto MM = AM.getResult<ModelManagerFunctionProxy>(F);
 	auto model = MM.getModel();
@@ -248,11 +260,12 @@ VerifyResult TimeMultiplexedVerifyPass::run(Function &F, FunctionAnalysisManager
 		if (lvr) {
 			result.registerKernel(L, lvr);
 		}
-
+		remarkEmitter(F, *L, lvr, AM);
 	}
 
 	return result;
 }
+
 
 /* ================= Implementation of DecoupledVerifyPass ================= */
 AnalysisKey DecoupledVerifyPass::Key;
@@ -267,6 +280,8 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 	auto MM = AM.getResult<ModelManagerFunctionProxy>(F);
 	auto model = MM.getModel();
 	auto dec_model = model->asDerived<DecoupledCGRA>();
+
+	auto MAM = AM.getResult<ModuleAnalysisManagerFunctionProxy>(F);
 
 	// ensure OmpStaticShecudleAnalysis result is cached for DecoupledAnalysis
 	auto SI = AM.getResult<OmpStaticShecudleAnalysis>(F);
@@ -320,11 +335,11 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 				} else {
 					msg = "No dependency";
 				}
-				auto LDR = InterLoopDependencyAnalysisResult("No dependency");
+				auto LDR = new InterLoopDependencyAnalysisResult(msg);
 				if (!loop_dep_valid) {
-					LDR.setVio();
+					LDR->setVio();
 				}
-				lvr.setResult(&LDR);
+				lvr.setResult(LDR);
 			}
 			break;
 			case CGRAModel::InterLoopDep::BackwardInst:
@@ -359,7 +374,7 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		VerifyResultBase *ag_compat;
 		switch (dec_model->getAG()->getKind()) {
 			case AddressGenerator::Kind::Affine:
-				ag_compat = &(LPM.getResult<VerifyAGCompatiblePass<AddressGenerator::Kind::Affine>>(*L, AR));
+				ag_compat = &(LPM.getResult<VerifyAGCompatiblePass<AffineAGCompatibility>>(*L, AR));
 				break;
 			default:
 				llvm_unreachable("This type of AG is not implemted\n");
@@ -370,8 +385,9 @@ VerifyResult DecoupledVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 		if (lvr) {
 			result.registerKernel(L, lvr);
 		}
-
+		remarkEmitter(F, *L, lvr, AM);
 	}
+
 
 	return result;
 }
@@ -430,6 +446,36 @@ SmallVector<Loop*> VerifyPassBase<DerivedT>::findPerfectlyNestedLoop(Function &F
 	return std::move(loop_kernels);
 }
 
+template<typename DerivedT>
+void VerifyPassBase<DerivedT>::remarkEmitter(Function &F,  Loop &L,
+					LoopVerifyResult &R, FunctionAnalysisManager &AM)
+{
+	auto &ORE = AM.getResult<OptimizationRemarkEmitterAnalysis>(F);
+	
+	if (R) {
+		ORE.emit([&]() {
+			auto Remark = OptimizationRemark(CGRAOMP_PASS_NAME, "valid kernel",
+					L.getStartLoc(), L.getHeader());
+			Remark << ore::NV("Loop", L.getName());
+			return Remark;
+		});
+	} else {
+		ORE.emit([&]() {
+			auto Remark = OptimizationRemarkMissed(CGRAOMP_PASS_NAME, "invalid kernel",
+					L.getStartLoc(), L.getHeader());
+			Remark << ore::NV("Loop", L.getName());
+			for (auto item : R.results()) {
+				auto res = item.second;
+				Remark << ore::NV(res->getName(), 
+						*res ? "PASS" : "VIOLATE");
+			}
+			return Remark;
+		});
+	}
+
+}
+
+
 
 /* ================== Implementation of VerifyModulePass ================== */
 PreservedAnalyses VerifyModulePass::run(Module &M, ModuleAnalysisManager &AM)
@@ -439,6 +485,8 @@ PreservedAnalyses VerifyModulePass::run(Module &M, ModuleAnalysisManager &AM)
 	auto &MM = AM.getResult<ModelManagerPass>(M);
 	auto model = MM.getModel();
 
+	VerifyResult *result;
+
 	// obtain OpenMP kernels
 	auto &kernel_info = AM.getResult<OmpKernelAnalysisPass>(M);
 
@@ -446,19 +494,39 @@ PreservedAnalyses VerifyModulePass::run(Module &M, ModuleAnalysisManager &AM)
 	for (auto F : kernel_info.kernels()) {
 		//verify OpenMP target function
 		auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+		// save offloading func info as diagnostic info
+		if (auto offload_func = kernel_info.getOffloadFunction(F)) {
+			auto &ORE = FAM.getResult<OptimizationRemarkEmitterAnalysis>(*offload_func);
+			auto MD = kernel_info.getMetadata(offload_func);
+			ORE.emit([&]() {
+				return OptimizationRemarkAnalysis(CGRAOMP_PASS_NAME, 
+					"Offloading function", offload_func->getSubprogram(),
+					&offload_func->getEntryBlock())
+					<< ore::NV("caller", MD->func_name)
+					<< ore::NV("callee", F->getName())
+					<< ore::NV("defined line", MD->line);
+			});
+		}
+
 		switch(model->getKind()) {
 			case CGRAModel::CGRACategory::Decoupled:
-				{auto verify_res = FAM.getResult<DecoupledVerifyPass>(*F);}
+				result = &FAM.getResult<DecoupledVerifyPass>(*F);
 				break;
 			case CGRAModel::CGRACategory::TimeMultiplexed:
-				auto verify_res = FAM.getResult<TimeMultiplexedVerifyPass>(*F);
+				result = &FAM.getResult<TimeMultiplexedVerifyPass>(*F);
 				break;
 		}
+
+		valid_kernels += result->getNumKernels();
 	}
+
+
+	
 
 	// there is no modification so it must keep all analysis
 	return PreservedAnalyses::all();
 }
+
 
 #undef DEBUG_TYPE
 

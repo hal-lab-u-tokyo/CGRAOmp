@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 18-02-2022 13:48:09
+#   Last Modified: 21-02-2022 03:14:19
 ###
 
 from argparse import ArgumentParser
@@ -74,6 +74,7 @@ try:
         event_handler.on_modified = on_modified
         observer = Observer()
         for target_dir in dir_list:
+            print(target_dir)
             observer.schedule(event_handler, target_dir, recursive=True)
         observer.start()
     def end_watchdog():
@@ -295,7 +296,7 @@ def unbundle(source, host_out, cgra_out, arch, verbose):
                     OMP_TARGET_FMT.format(target = arch))]
     return run("OpenMP target unbundling", cmd, verbose)
 
-def passCGRAOmp(infile, outfile, libpath, config, options, verbose):
+def passCGRAOmp(infile, outfile, libpath, config, options, args, verbose):
 
     cmd = ["opt", "-S"]
     cmd += ["-load", f"{libpath}/libCGRAOmpComponents.so"]
@@ -312,7 +313,13 @@ def passCGRAOmp(infile, outfile, libpath, config, options, verbose):
     cmd += ["-o", outfile]
     cmd += options
 
-    start_watchdog(str(Path(infile).parent))
+    target_dir = ""
+    if args.dfg_file_prefix:
+        target_dir = Path(args.dfg_file_prefix).parent
+    if target_dir == "":
+        target_dir = "."
+    
+    start_watchdog([target_dir])
     result = run("Verify kernel, extract DFG, and insert runtime",\
                 cmd, verbose)
     end_watchdog()
@@ -441,7 +448,7 @@ def main():
 
     options = parseCGRAOmpArgs(args)
     if passCGRAOmp(cgra_preopt_name, cgra_post_name, libpath, \
-                        args.cgra_config, options, args.verbose):
+                        args.cgra_config, options, args, args.verbose):
         add_imm(cgra_post_name)
     else:
         return

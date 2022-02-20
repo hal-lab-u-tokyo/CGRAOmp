@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 20-02-2022 20:12:18
+*    Last Modified: 21-02-2022 06:28:31
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -162,6 +162,30 @@ void CGRADFG::makeSequentialNodeID()
 			N->ID = count++;
 		}
 	}
+}
+
+
+Error CGRADFG::saveExtraInfo(StringRef filepath)
+{
+	
+	// open file
+	error_code EC;
+	raw_fd_ostream File(filepath, EC, sys::fs::OpenFlags::F_Text);
+	json::OStream JS(File, 4);
+
+	if (!EC) {
+		JS.object([&]() {
+			for (auto *Node : Nodes) {
+				if (Node->hasExtraInfo()) {	
+					JS.attribute(Node->getUniqueName(), 
+								Node->getExtraInfoAsJSONObject());
+				}
+			}
+		});
+	} else {
+		return errorCodeToError(EC);
+	}
+	return ErrorSuccess();
 }
 
 

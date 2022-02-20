@@ -25,23 +25,25 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 20-02-2022 07:39:56
+*    Last Modified: 21-02-2022 03:08:57
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
 
-#include "llvm/IR/PassManager.h"
-#include "llvm/IR/Function.h"
-#include "llvm/Passes/PassBuilder.h"
-#include "llvm/Passes/PassPlugin.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/OptimizationRemarkEmitter.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "CGRAOmpPass.hpp"
 #include "DecoupledAnalysis.hpp"
@@ -132,6 +134,8 @@ namespace CGRAOmp {
 				return OS;
 			}
 
+			virtual StringRef getName() const = 0;
+
 			/**
 			 * @brief mark this result as violated
 			 */
@@ -167,6 +171,8 @@ namespace CGRAOmp {
 	class LoopVerifyResult : public VerifyResultBase {
 
 		public:
+			using result_iterator = DenseMap<int, VerifyResultBase*>::iterator;
+			
 			/**
 			 * @brief Construct a new Verify Result object
 			 */
@@ -204,6 +210,32 @@ namespace CGRAOmp {
 			void setBackBranch(Loop*L, BranchInst* B) {
 				back_branch_list[L] = B;
 			}
+
+			result_iterator result_begin() {
+				return each_result.begin();
+			}
+
+			result_iterator result_end() {
+				return each_result.end();
+			}
+
+			iterator_range<result_iterator> results() {
+				return make_range(result_begin(), result_end());
+			}
+
+			StringRef getName() const {
+				return "Loop verify result summary";
+			}
+
+			VerifyResultBase* getResult(VerificationKind kind) {
+				auto result = each_result.find(static_cast<int>(kind));
+				if (result != each_result.end()) {
+					return result->second;
+				} else {
+					return nullptr;
+				}
+			}
+
 
 		private:
 			DenseMap<int, VerifyResultBase*> each_result;
@@ -269,6 +301,14 @@ namespace CGRAOmp {
 				}
 			}
 
+			StringRef getName() const {
+				return "Verify result summary";
+			}
+
+			int getNumKernels() {
+				return valid_kernels.size();
+			}
+
 
 		private:
 			std::map<Loop*, LoopVerifyResult> loop_verify_results;
@@ -292,8 +332,14 @@ namespace CGRAOmp {
 			void print(raw_ostream &OS) const {
 				OS << msg;
 			}
+
+			StringRef getName() const {
+				return name;
+			}
+
 		private:
 			std::string msg;
+			static const char *name;
 	};
 
 	using DecoupleAnalysisResult = SimpleVerifyResult<VerificationKind::Decoupling>;
@@ -323,6 +369,8 @@ namespace CGRAOmp {
 			LoopList findPerfectlyNestedLoop(Function &F,
 				LoopStandardAnalysisResults &AR);
 
+			void remarkEmitter(Function &F, Loop &L, LoopVerifyResult &R,
+										 FunctionAnalysisManager &AM);
 		};
 
 	/**
@@ -369,6 +417,10 @@ namespace CGRAOmp {
 
 			void add_unsupported(Instruction* I) {
 				unsupported.insert(I);
+			}
+
+			StringRef getName() const {
+				return "Instruction availability";
 			}
 
 		private:
@@ -454,6 +506,7 @@ namespace CGRAOmp {
 						}
 					}
 				}
+
 				if (unsupported.size() == 0) {
 					return None;
 				} else {
@@ -475,7 +528,8 @@ namespace CGRAOmp {
 		public:
 			PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 		private:
-
+			void remarkEmitter(Function &F, VerifyResult &R,
+								FunctionAnalysisManager &AM);
 	};
 
 	/**

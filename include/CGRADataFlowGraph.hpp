@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 20-02-2022 20:13:12
+*    Last Modified: 21-02-2022 06:29:34
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -38,6 +38,7 @@
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/Support/JSON.h"
 
 #include "CGRAInstMap.hpp"
 #include "OptionPlugin.hpp"
@@ -109,16 +110,39 @@ namespace llvm {
 
 			virtual string getUniqueName() const = 0;
 			virtual string getNodeAttr() const = 0;
-			virtual string getExtraInfo() const { return ""; };
+			virtual string getExtraAttr() const { return ""; };
 
 			bool isEqualTo(const DFGNode &N) const {
 				return this->ID == N.ID;
+			}
+
+			void setExtraInfo(StringRef key, json::Value V) {
+				extra_info[key] = new json::Value(std::move(V));
+			}
+
+			bool hasExtraInfo() const {
+				return !extra_info.empty();
+			}
+
+			json::Value getExtraInfoAsJSONObject() {
+				if (!hasExtraInfo()) {
+					return json::Object({});
+				} else {
+					json::Object json_obj;
+					for (auto &item : extra_info) {
+						json_obj[item.getKey()] = *(item.getValue());
+					}
+					return json::Value(std::move(json_obj));
+				}
+
 			}
 
 		protected:
 			NodeKind kind;
 			int ID;
 			Value *val;
+			StringMap<json::Value*> extra_info;
+
 	};
 
 	/**
@@ -338,7 +362,7 @@ namespace llvm {
 			}
 			string getNodeAttr() const;
 
-			string getExtraInfo() const {
+			string getExtraAttr() const {
 				return getConstStr();
 			}
 			static bool classof(const DFGNode *N) {
@@ -363,7 +387,7 @@ namespace llvm {
 			}
 			string getNodeAttr() const;
 
-			string getExtraInfo() const {
+			string getExtraAttr() const {
 				return getDataStr();
 			}
 			static bool classof(const DFGNode *N) {
@@ -571,6 +595,17 @@ namespace llvm {
 				return !EL.empty();
 			}
 
+			bool hasExtraInfo() const {
+				bool find = false;
+				for (auto *Node : Nodes) {
+					if (Node->hasExtraInfo()) {
+						find = true;
+						break;
+					}
+				}
+				return find;
+			}
+
 			/**
 			 * @brief convert "Node_" + @a pointer style node name to more plain name
 			 * 
@@ -586,6 +621,8 @@ namespace llvm {
 			 * @return Error in the case of failure in creating a new file (e.g., because the same name file already exists)
 			 */
 			Error saveAsDotGraph(StringRef filepath);
+
+			Error saveExtraInfo(StringRef filepath);
 
 			/**
 			 * @brief Set the Name object
@@ -758,7 +795,7 @@ namespace llvm {
 
 			static string getNodeIdentifierLabel(const DFGNode *Node, 
 								const CGRADFG *G) {
-				return Node->getExtraInfo();
+				return Node->getExtraAttr();
 			}
 
 			static string getNodeDescription(const DFGNode *Node, 

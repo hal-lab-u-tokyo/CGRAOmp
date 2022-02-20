@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  18-02-2022 18:14:28
-*    Last Modified: 19-02-2022 07:06:26
+*    Last Modified: 20-02-2022 22:37:54
 */
 #include "LoopDependencyAnalysis.hpp"
 #include "OptionPlugin.hpp"
@@ -119,7 +119,7 @@ LoopDependencyAnalysisPass::Result LoopDependencyAnalysisPass::run(Loop &L, Loop
 		if (dep.isBackward()) {
 			LoadInst *use = dyn_cast<LoadInst>(dep.getSource(LAI));
 			StoreInst *def = dyn_cast<StoreInst>(dep.getDestination(LAI));
-
+			
 			if (!use || !def) continue; //not store->load
 
 			auto Dist = getDistance(def, use, AR.SE);

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  18-02-2022 18:10:42
-*    Last Modified: 20-02-2022 04:20:52
+*    Last Modified: 20-02-2022 22:42:54
 */
 #ifndef LoopDependencyAnalysis_H
 #define LoopDependencyAnalysis_H
@@ -241,40 +241,6 @@ namespace CGRAOmp {
 			int getNumDep() {
 				return lc_dep_list.size();
 			}
-
-			// LoopDependency* get_dep(PHINode *phi) {
-			// 	for (auto dep : idv_deps()) {
-			// 		if (dep->correspond(phi)) {
-			// 			return dep;
-			// 		}
-			// 	}
-			// 	for (auto dep : lc_deps()) {
-			// 		if (dep->correspond(phi)) {
-			// 			return dep;
-			// 		}
-			// 	}
-			// 	return nullptr;
-			// }
-
-			// LoopDependency* get_dep(Instruction *U) {
-			// 	for (auto dep : idv_deps()) {
-			// 		if (dep->correspond(U)) {
-			// 			return dep;
-			// 		}
-			// 	}
-			// 	for (auto dep : mem_deps()) {
-			// 		if (dep->correspond(U)) {
-			// 			return dep;
-			// 		}
-			// 	}
-			// 	for (auto dep : lc_deps()) {
-			// 		if (dep->correspond(U)) {
-			// 			return dep;
-			// 		}
-			// 	}
-			// 	return nullptr;
-			// }
-
 
 		private:
 			DepList indvar_dep_list;

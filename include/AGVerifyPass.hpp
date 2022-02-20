@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-02-2022 13:23:43
-*    Last Modified: 18-02-2022 15:50:18
+*    Last Modified: 21-02-2022 03:45:40
 */
 #ifndef AGVerifyPass_H
 #define AGVerifyPass_H
@@ -37,6 +37,7 @@
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/JSON.h"
 
 #include "VerifyPass.hpp"
 
@@ -52,15 +53,14 @@ namespace CGRAOmp {
 	 * @class AGCompatibility
 	 * @brief A derived class from VerifyResultBase describing whether the memory access pattern is compatible with the AGs or not
 	 * 
-	 * @tparam kind Kind of AddressGenerator
 	*/
-	template<AddressGenerator::Kind AGKind>
+
 	class AGCompatibility : public VerifyResultBase {
 		public:
 			/**
 			 * @brief Construct a new AGCompatibility object
 			 */
-			AGCompatibility() : ag_kind(AGKind),
+			AGCompatibility(AddressGenerator::Kind AGKind) : ag_kind(AGKind),
 				VerifyResultBase(VerificationKind::MemoryAccess) {};
 			
 
@@ -77,6 +77,15 @@ namespace CGRAOmp {
 			AddressGenerator::Kind geAGtKind() const {
 				return ag_kind;
 			}
+
+			StringRef getName() const {
+				return "Address generator compatibility";
+			}
+
+			virtual llvm::json::Value getConfigAsJson(Instruction* I) const {
+				return json::Object({});
+			};
+
 		private:
 			AddressGenerator::Kind ag_kind;
 
@@ -86,9 +95,9 @@ namespace CGRAOmp {
 	 * @class AffineAGCompatibility
 	 * @brief A derived class from AGCompatibility for affine AGs
 	*/
-	class AffineAGCompatibility : public AGCompatibility<AddressGenerator::Kind::Affine> {
+	class AffineAGCompatibility : public AGCompatibility {
 		public:
-			AffineAGCompatibility() : AGCompatibility(), nested_level(0)
+			AffineAGCompatibility() : AGCompatibility(AddressGenerator::Kind::Affine), nested_level(0)
 			{};
 
 			/**
@@ -108,7 +117,7 @@ namespace CGRAOmp {
 
 			// for dyn_cast from VerifyResultBase pointer
 			static bool classof(const VerifyResultBase* R) {
-				if (auto ag_compat = dyn_cast<AGCompatibility<AddressGenerator::Kind::Affine>>(R)) {
+				if (auto ag_compat = dyn_cast<AGCompatibility>(R)) {
 					return ag_compat->geAGtKind() == AddressGenerator::Kind::Affine;
 				}
 				return false;
@@ -124,6 +133,8 @@ namespace CGRAOmp {
 				config[I] = C;
 			};
 
+			virtual llvm::json::Value getConfigAsJson(Instruction *I) const;
+
 		private:
 			DenseMap<Instruction*, ConfigTy> config;
 			SmallVector<Instruction*> invalid_list;
@@ -138,11 +149,11 @@ namespace CGRAOmp {
 	 * 
 	 * @remarks This template needs specilization of @em run method for each address generator type
 	*/
-	template <AddressGenerator::Kind Kind>
+	template <typename AGCompatibilityTy>
 	class VerifyAGCompatiblePass :
-		public AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>> {
+		public AnalysisInfoMixin<VerifyAGCompatiblePass<AGCompatibilityTy>> {
 		public:
-			using Result = AGCompatibility<Kind>;
+			using Result = AGCompatibilityTy;
 
 			/**
 			 * @brief actual implementation of running pass
@@ -155,13 +166,13 @@ namespace CGRAOmp {
 			Result run(Loop &L, LoopAnalysisManager &AM,
 						LoopStandardAnalysisResults &AR);
 		private:
-			friend AnalysisInfoMixin<VerifyAGCompatiblePass<Kind>>;
+			friend AnalysisInfoMixin<VerifyAGCompatiblePass<AGCompatibilityTy>>;
 			static AnalysisKey Key;
 
 	};
 
-	template <AddressGenerator::Kind Kind>
-	AnalysisKey VerifyAGCompatiblePass<Kind>::Key;
+	template <typename AGCompatibilityTy>
+	AnalysisKey VerifyAGCompatiblePass<AGCompatibilityTy>::Key;
 
 
 	// /**
