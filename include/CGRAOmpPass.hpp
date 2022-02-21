@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
-*    Last Modified: 21-02-2022 01:26:48
+*    Last Modified: 22-02-2022 03:38:11
 */
 #ifndef CGRAOmpPass_H
 #define CGRAOmpPass_H
@@ -264,6 +264,7 @@ namespace CGRAOmp {
 			Result run(Module &M, ModuleAnalysisManager &AM);
 		private:
 			friend AnalysisInfoMixin<OmpKernelAnalysisPass>;
+			friend class RemoveScheduleRuntimePass;
 			static AnalysisKey Key;
 			
 			
@@ -276,13 +277,15 @@ namespace CGRAOmp {
 	class OmpScheduleInfo {
 		using Info_t = SetVector<Value*>;
 		public:
-			OmpScheduleInfo(Value *schedule_type,
+			OmpScheduleInfo(CallBase *caller,
+							Value *schedule_type,
 							Value *last_iter_flag,
 							Value *lower_bound,
 							Value *upper_bound,
 							Value *stride,
 							Value *increment,
-							Value *chunk) {
+							Value *chunk) : 
+				caller(caller) {
 				info.insert(schedule_type);
 				info.insert(last_iter_flag);
 				info.insert(lower_bound);
@@ -326,7 +329,7 @@ namespace CGRAOmp {
 			Value* get_upper_bound() {
 				return info[3];
 			}
-			Value* get_stride() {
+		Value* get_stride() {
 				return info[4];
 			}
 			Value* get_increment() {
@@ -335,8 +338,15 @@ namespace CGRAOmp {
 			Value* get_chunk() {
 				return info[6];
 			}
+
+			CallBase *get_caller() {
+				return caller;
+			}
+
+			
 		private:
 			Info_t info;
+			CallBase *caller;
 			bool valid;
 	};
 
@@ -353,8 +363,16 @@ namespace CGRAOmp {
 
 		private:
 			friend AnalysisInfoMixin<OmpStaticShecudleAnalysis>;
+			friend class RemoveScheduleRuntimePass;
 			static AnalysisKey Key;
 	};
+
+	class RemoveScheduleRuntimePass:
+		public PassInfoMixin<RemoveScheduleRuntimePass> {
+		public:
+			PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+	};
+
 }
 
 #endif //CGRAOmpPass_H

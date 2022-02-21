@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-02-2022 13:23:43
-*    Last Modified: 21-02-2022 03:45:40
+*    Last Modified: 22-02-2022 06:18:30
 */
 #ifndef AGVerifyPass_H
 #define AGVerifyPass_H
@@ -54,7 +54,6 @@ namespace CGRAOmp {
 	 * @brief A derived class from VerifyResultBase describing whether the memory access pattern is compatible with the AGs or not
 	 * 
 	*/
-
 	class AGCompatibility : public VerifyResultBase {
 		public:
 			/**
@@ -86,6 +85,8 @@ namespace CGRAOmp {
 				return json::Object({});
 			};
 
+			int getDynamicTripCount();
+
 		private:
 			AddressGenerator::Kind ag_kind;
 
@@ -112,6 +113,7 @@ namespace CGRAOmp {
 			typedef struct {
 				bool valid;
 				SmallVector<DimEntry_t> config;
+				Value *base = nullptr;
 			} ConfigTy;
 			
 
@@ -139,6 +141,7 @@ namespace CGRAOmp {
 			DenseMap<Instruction*, ConfigTy> config;
 			SmallVector<Instruction*> invalid_list;
 			int nested_level;
+		
 	};
 
 	/**
@@ -185,9 +188,11 @@ namespace CGRAOmp {
 	// 							ScalarEvolution &SE);
 	// void parseSCEV(const SCEV *scev, ScalarEvolution &SE, int depth = 0);
 
-	void verifySCEVAsAffineAG(const SCEV* S, ScalarEvolution &SE, AffineAGCompatibility::ConfigTy& C);
+	void verifySCEVAsAffineAG(const SCEV* S, LoopStandardAnalysisResults &AR, AffineAGCompatibility::ConfigTy& C);
 	
+	bool parseStartSCEV(const SCEV* S, int *offset, Value **base);
 
+	unsigned computeLoopTripCount(const Loop *L, LoopStandardAnalysisResults &AR);
 }
 
 #endif //AGVerifyPass_H

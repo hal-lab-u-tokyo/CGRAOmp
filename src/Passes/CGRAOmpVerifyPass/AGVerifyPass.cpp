@@ -25,12 +25,13 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-02-2022 13:01:22
-*    Last Modified: 21-02-2022 03:45:50
+*    Last Modified: 22-02-2022 06:24:11
 */
 
 #include "AGVerifyPass.hpp"
 
 #include "llvm/Analysis/IVDescriptors.h"
+#include "llvm/IR/Constants.h"
 
 #include <deque>
 
@@ -73,7 +74,7 @@ VerifyAGCompatiblePass<AffineAGCompatibility>::run(Loop &L,
 			if (SE.isSCEVable(addr->getType())) {
 				const auto *s = SE.getSCEV(addr);
 				AffineAGCompatibility::ConfigTy C;
-				verifySCEVAsAffineAG(s, SE, C);
+				verifySCEVAsAffineAG(s, AR, C);
 				result.add(load, C);
 
 			} else {
@@ -86,7 +87,7 @@ VerifyAGCompatiblePass<AffineAGCompatibility>::run(Loop &L,
 			if (SE.isSCEVable(addr->getType())) {
 				const auto *s = SE.getSCEV(addr);
 				AffineAGCompatibility::ConfigTy C;
-				verifySCEVAsAffineAG(s, SE, C);
+				verifySCEVAsAffineAG(s, AR, C);
 				result.add(store, C);
 			} else {
 				// SCEV not available
@@ -129,23 +130,34 @@ llvm::json::Value AffineAGCompatibility::getConfigAsJson(Instruction *I) const
 {
 
 	auto config_value = config.find(I);
-	json::Array top;
+	json::Object top;
 	if (config_value != config.end()) {
+		if (config_value->second.base != nullptr) {
+			top["base"] = std::move(json::Value(
+				config_value->second.base->getNameOrAsOperand())
+			);
+		} else {
+			top["base"] = std::move(json::Value("unknown"));
+		}
+		json::Array arr;
 		for (auto C : config_value->second.config) {
-			top.push_back(json::Object(
+
+			arr.push_back(json::Object(
 				{{"start", json::Value(C.start)},
 				 {"step", json::Value(C.step)},
 				 {"count", json::Value(C.count)}}
 			));
 		}
+		top["offset"] = std::move(arr);
 	}
 
 	return std::move(top);
 }
 
 /* ================= Utility functions ================= */
-void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, ScalarEvolution &SE, AffineAGCompatibility::ConfigTy& C)
+void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, LoopStandardAnalysisResults &AR, AffineAGCompatibility::ConfigTy& C)
 {
+	auto &SE = AR.SE;
 	// stack for depth first seach
 	std::vector<const SCEV*> scev_stack;
 	scev_stack.emplace_back(S);
@@ -177,24 +189,26 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, ScalarEvolution &SE, AffineAGC
 					auto *SAR = dyn_cast<SCEVAddRecExpr>(scev);
 					auto *step = SAR->getStepRecurrence(SE);
 					const auto *start = SAR->getStart();
-					InductionDescriptor IDV;
-					// TODO: below code cannot determine outer most loop count
-					int count = SE.getSmallConstantMaxTripCount(SAR->getLoop());
+					int count = SE.getSmallConstantTripCount(SAR->getLoop());
+					int step_val = 0;
+					int start_val = 0;
 					if (step->getSCEVType() == scConstant) {
-						if (auto step_val = dyn_cast<SCEVConstant>(step)->getAPInt().getRawData()) {
-							// errs() << "Step: " << *step_val << "\n";
-							AffineAGCompatibility::DimEntry_t entry = {0, (int64_t)(*step_val), count};
-							C.config.emplace_back(entry);
-							scev_stack.emplace_back(start);
+						if (auto step_val_ptr = dyn_cast<SCEVConstant>(step)->getAPInt().getRawData()) {
+							step_val = *step_val_ptr;
 						} else {
-							// unknown
 							invalidate();
 						}
 					} else {
-						// not constant
-						// errs() << "not constant\n";
 						invalidate();
 					}
+					Value *base;
+					if (parseStartSCEV(start, &start_val, &base)) {
+						C.base = base;
+					}
+					AffineAGCompatibility::DimEntry_t entry = {start_val, step_val, count};
+					C.config.insert(C.config.begin(), entry);
+					scev_stack.emplace_back(start);
+
 				}
 			} break;// end case scAddRecExpr
 			case scAddExpr:
@@ -241,6 +255,69 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, ScalarEvolution &SE, AffineAGC
 		} // end switch
 	} // end depth first search
 
+}
+
+bool CGRAOmp::parseStartSCEV(const SCEV* S, int *offset, Value **base)
+{
+	*base = nullptr;
+	*offset = 0;
+	if (auto SA = dyn_cast<SCEVAddExpr>(S)) {
+		if (SA->getNumOperands() <= 2) {
+			for (auto operand : SA->operands()) {
+				if (auto const_scev = dyn_cast<SCEVConstant>(operand)) {
+					*offset += *(const_scev->getAPInt().getRawData());
+				} else if (auto scev_value = dyn_cast<SCEVUnknown>(operand)) {
+					// already set
+					if (*base) return false;
+					*base = scev_value->getValue();
+				}
+			}
+		} else {
+			return false;
+		}
+	} else if (auto SU = dyn_cast<SCEVUnknown>(S)) {
+		*base = SU->getValue();
+	}
+	return true;
+}
+
+// not fully implemented bellow
+unsigned CGRAOmp::computeLoopTripCount(const Loop *L, LoopStandardAnalysisResults &AR)
+{
+	InductionDescriptor IDV;
+	if (!L->getInductionDescriptor(AR.SE, IDV)) {
+		return 0;
+	}
+	BasicBlock *Latch = L->getLoopLatch();
+	auto BackBranch = dyn_cast<BranchInst>(Latch->getTerminator());
+	if (!BackBranch || !BackBranch->isConditional()) {
+		return 0;
+	}
+	ICmpInst *Compare = dyn_cast<ICmpInst>(BackBranch->getCondition());
+	if (!Compare || Compare->hasNUsesOrMore(2)) {
+		return 0;
+	}
+
+	PHINode* IdvPhi = L->getInductionVariable(AR.SE);
+	IdvPhi->dump();
+	auto opcode = IDV.getInductionOpcode();
+	auto *step = IDV.getConstIntStepValue();
+	if (!step) {
+		return 0;
+	}
+	int step_int = step->getSExtValue();
+
+	// initial value of induction variable
+	auto init_value = IdvPhi->getIncomingValueForBlock(L->getLoopPreheader());
+
+	Value* Bound = (Compare->getOperand(0) == IdvPhi) ? Compare->getOperand(1) :
+					Compare->getOperand(0);
+
+
+	if (L->isGuarded()) {
+		L->getLoopGuardBranch()->dump();
+	}
+	return 0;
 }
 
 #undef DEBUG_TYPE
