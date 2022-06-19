@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  26-08-2021 20:50:56
-#    Last Modified: 09-02-2022 10:21:43
+#    Last Modified: 19-06-2022 19:52:21
 #
 
 # See docs/CMake.html for instructions about how to build LLVM with CMake.
@@ -64,3 +64,4 @@ install(FILES scripts/cgraomp-cc
         PERMISSIONS OWNER_READ OWNER_EXECUTE GROUP_READ WORLD_READ
         DESTINATION bin/)
 install(DIRECTORY scripts/cc_config DESTINATION lib/)
+install(DIRECTORY scripts/backend DESTINATION lib/)

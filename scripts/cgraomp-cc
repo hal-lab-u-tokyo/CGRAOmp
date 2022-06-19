@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 21-02-2022 03:14:19
+#   Last Modified: 19-06-2022 20:16:41
 ###
 
 from argparse import ArgumentParser
@@ -38,13 +38,8 @@ from pathlib import Path
 import subprocess
 from pathlib import Path
 from shutil import get_terminal_size
-from functools import reduce
 import tempfile
 from collections import defaultdict
-from unittest import result
-
-
-
 
 
 installed_dir = str(Path(__file__).parent.parent.absolute())
@@ -53,6 +48,7 @@ default_libdir = installed_dir + "/lib"
 sys.path.append(default_libdir)
 
 from cc_config.Config import *
+from backend.backend_wrapper import backend_wrapper
 
 IMM_FILES = []
 
@@ -74,12 +70,16 @@ try:
         event_handler.on_modified = on_modified
         observer = Observer()
         for target_dir in dir_list:
-            print(target_dir)
-            observer.schedule(event_handler, target_dir, recursive=True)
-        observer.start()
+            try:
+                observer.schedule(event_handler, target_dir, recursive=True)
+                observer.start()
+            except Exception:
+                print(WARNING_STR, "directory not found: {0}".format(target_dir))
+        
     def end_watchdog():
         observer.stop()
-        observer.join()
+        if (observer.isAlive()):
+            observer.join()
         
 except ModuleNotFoundError:
     start_watchdog = lambda dir_list: None
@@ -154,6 +154,18 @@ def parser():
                             help="File format for the DFG visulization (default: png)")
     argparser.add_argument("--simplify-dfg-name", action="store_true",
                             help="Use simplified file name for DFGs")
+    # to connect back-end mapper
+    argparser.add_argument("--backend-runner", type=str,
+                            help="Specify a runner script to drive a back-end mapping")
+    argparser.add_argument("--backend-runner-command", type=str, default="bash",
+                            help="Specify command to run the runner script (default: bash)")
+    argparser.add_argument("--backend-proc-num", type=int, default=1,
+                            help="specify the number of backend process to run simulatanceously (default: 1)")
+    argparser.add_argument("--backend-panel-num", type=int, default=1,
+                            help="specify the number of panel to view the backend process stdout")
+    argparser.add_argument("--backend-nowait", action="store_true",
+                            help="Finish immediately when all the backend processes are finished")
+
     # for other options
     argparser.add_argument("-Xcgraomp", dest="cgraomp_args", \
                             action="append", metavar="<arg>", \
@@ -161,6 +173,7 @@ def parser():
 
     # default setting
     argparser.set_defaults(opt="-O2", clang_args=[], cgraomp_args=[], preopt=[])
+
 
     args = argparser.parse_args()
 
@@ -364,6 +377,12 @@ def main():
     if (args.opt == "O0"):
         print(WARNING_STR + ": Optimization level O0 is not available")
 
+    if not args.backend_runner is None:
+        if not Path(args.backend_runner).exists():
+            print(ERROR_STR, "runner script is not found: {0}".format(args.backend_runner))
+            return
+
+
     # filepath setting
     if args.output is None:
         outdir = "."
@@ -453,8 +472,20 @@ def main():
     else:
         return
 
+    # graph visualization if needed
     if args.visualize_dfg:
         visualizeDFG(args.visualize_dfg_type, args.verbose)
+
+    # backend process if needed
+    if not args.backend_runner is None:
+        if len(dot_list) == 0:
+            print(WARNING_STR, "No data-flow-graph is generated.",
+                    "Backend mapping is aborted")
+        else:
+            cmd = [args.backend_runner_command, args.backend_runner]
+            backend_wrapper(dot_list, cmd, \
+                            args.backend_panel_num, args.backend_proc_num,
+                            args.backend_nowait)
 
 
 def addImmFile(f):
