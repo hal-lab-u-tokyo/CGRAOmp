@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 21-02-2022 06:28:31
+*    Last Modified: 29-06-2022 18:50:27
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -52,7 +52,8 @@ string ConstantNode::getConstStr() const
 
 	Value* data_src = (skip_seq) ? skip_seq->back() : val;
 	auto type_str = getTypeName(data_src->getType());
-	const char* fmt = "datatype=\"{0}\",value=\"{1}\"";
+	//const char* fmt = "datatype=\"{0}\",value=\"{1}\"";
+	const char* fmt = "{0}={1}";
 
 	if (Constant* const_value = dyn_cast<Constant>(data_src)) {
 		if (auto *cint = dyn_cast<ConstantInt>(const_value)) {

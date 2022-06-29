@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 #   Created Date:  18-06-2022 21:03:38
-#   Last Modified: 19-06-2022 19:56:50
+#   Last Modified: 29-06-2022 21:00:05
 ###
 
 try:
@@ -43,12 +43,18 @@ except ImportError:
     rich_available = False
 
 from cProfile import run
+from glob import escape
 from time import sleep
 from typing import List, Tuple, Dict, Set
 from datetime import datetime
 import subprocess
 import os
 import fcntl
+import re
+
+escape_finder = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+cursor_up_finder = re.compile(r'\x1B\[A')
+
 
 def backend_wrapper(files, cmd, panel_num, proc_num, nowait):
     jobs = []
@@ -181,13 +187,17 @@ class BackendJob():
         except IOError as e:
             pass
         return rdata
-    
+    def debug(self):
+        for i in range(len(self.buf)):
+            print(self.buf[i], hex(self.buf[i]))
+            
     def __decode(self) -> List[str]:
         """decode buffered bytes to string"""
         lines = []
         prev = 0
         for i in range(len(self.buf)):
             c = self.buf[i]
+
             if c == b'\n'[0]:
                 lines.append(self.buf[prev:i].decode())
                 prev = i + 1
@@ -196,8 +206,10 @@ class BackendJob():
 
         if prev < len(self.buf):
             lines.append(self.buf[prev:].decode())
-            
-        return lines
+
+        escape_lines = [escape_finder.sub('', l) for l in lines]
+
+        return escape_lines
 
 class StatusPanel():
     def __init__(self, jobs : List[BackendJob]):
