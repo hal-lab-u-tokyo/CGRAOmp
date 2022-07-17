@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 30-06-2022 14:09:33
+*    Last Modified: 17-07-2022 18:59:18
 */
 #include "common.hpp"
 #include "CGRAOmpPass.hpp"
@@ -46,6 +46,7 @@
 #include "llvm/Transforms/Scalar/LoopInstSimplify.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
+#include "llvm/Transforms/Scalar/LoopFlatten.h"
 
 #include "llvm/ADT/Statistic.h"
 
@@ -259,11 +260,6 @@ OmpKernelAnalysisPass::Result OmpKernelAnalysisPass::run(Module &M,
 			}
 		}
 	}
-	// for (auto &F : M) {
-	// 	if (F.getName().startswith("__nv_MAIN__F")) {
-	// 		result[F.getName()] = &F;
-	// 	}
-	// }
 	return result;
 }
 
@@ -385,6 +381,9 @@ static void registerPostOptimizationPasses(ModulePassManager &PM)
 				createFunctionToLoopPassAdaptor(LoopInstSimplifyPass())));
 	PM.addPass(createModuleToFunctionPassAdaptor(InstCombinePass()));
 	PM.addPass(createModuleToFunctionPassAdaptor(SimplifyCFGPass()));
+	if (OptEnableLoopFlatten) {
+		PM.addPass(createModuleToFunctionPassAdaptor(LoopFlattenPass()));
+	}
 }
 
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
@@ -397,8 +396,6 @@ llvmGetPassPluginInfo() {
 					ArrayRef<PassBuilder::PipelineElement>){
 						if (Name == CGRAOMP_PASS_NAME) {
 							// make a pipeline
-							//PM.addPass(ADD_LOOP_PASS(LoopRotatePass()));
-							// PM.addPass(ADD_FUNC_PASS(LCSSAPass()));
 							PM.addPass(RemoveScheduleRuntimePass());
 							registerPostOptimizationPasses(PM);
 

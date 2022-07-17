@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:20:02
-*    Last Modified: 19-02-2022 02:27:45
+*    Last Modified: 17-07-2022 19:59:36
 */
 #ifndef OptionPlugin_H
 #define OptionPlugin_H
@@ -177,6 +177,9 @@ namespace CGRAOmp
 	/// to set common preference for edge
 	extern cl::list<OptKeyValue> OptDFGEdgeProp;
 
+	/// to specify precision width for floating-point number in DOT file
+	extern cl::opt<int> OptDFGFloatPrecWidth;
+	
 	/// to specify which DFG Pass is applied
 	extern cl::list<string> OptDFGPassPipeline;
 
@@ -194,6 +197,11 @@ namespace CGRAOmp
 
 	/// threshold count for how close memory dependency is regarded as a data dependency in data flow graph
 	extern cl::opt<int> OptMemoryDependencyDistanceThreshold;
+
+	/// to enable loop-flatten pass for CGRA kernel
+	extern cl::opt<bool> OptEnableLoopFlatten;
+
+
 
 }
 

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 12-07-2022 18:21:14
+*    Last Modified: 17-07-2022 20:25:55
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -42,6 +42,7 @@
 
 #include "CGRAInstMap.hpp"
 #include "OptionPlugin.hpp"
+#include "Utils.hpp"
 
 #include <string>
 #include <utility>
@@ -271,46 +272,21 @@ namespace llvm {
 
 				if (ty->isPointerTy()) {
 					ele_ty = ty->getPointerElementType();
-					format_str = "address<{0}>";
+					format_str = "\"address<{0}>\"";
 				}
 				if (ele_ty->isArrayTy()) {
 					ele_ty = ele_ty->getArrayElementType();
 				}
 
-				switch (ele_ty->getTypeID()) {
-					case Type::BFloatTyID:
-						type_str = "float16"; break;
-					case Type::FloatTyID:
-						type_str = "float32"; break;
-					case Type::DoubleTyID:
-						type_str = "float64"; break;
-					case Type::FP128TyID:
-						type_str = "float128"; break;
-					case Type::IntegerTyID:
-					{
-						auto intty = dyn_cast<IntegerType>(ele_ty);
-						type_str = formatv("int{0}", intty->getBitWidth());
-					} break;
-					default:
-						return "unknown";
+				if (ele_ty->isIntegerTy()) {
+					type_str = "float" + to_string(Utils::getDataWidth(ele_ty));
+				} else if (ele_ty->isFloatingPointTy()) {
+					type_str = "int" + to_string(Utils::getDataWidth(ele_ty));
+				} else {
+					type_str = "unknown";
 				}
 
 				return formatv(format_str.c_str(), type_str);
-			}
-
-			string getFloatType(APFloat f) const {
-				switch (APFloatBase::SemanticsToEnum(f.getSemantics())) {
-					case APFloat::Semantics::S_IEEEhalf:
-						return "float16";
-					case APFloat::Semantics::S_IEEEsingle:
-						return "float32";
-					case APFloat::Semantics::S_IEEEdouble:
-						return "float64";
-					case APFloat::Semantics::S_IEEEquad:
-						return "float128";
-					default:
-						return "unknown";
-				}
 			}
 
 			string getSkipSeq() const {

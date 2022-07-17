@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 07-07-2022 19:59:09
+*    Last Modified: 17-07-2022 19:40:37
 */
 
 #include "llvm/ADT/SetOperations.h"
@@ -34,7 +34,6 @@
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/ScalarEvolution.h"
@@ -50,6 +49,7 @@
 #include "DecoupledAnalysis.hpp"
 #include "AGVerifyPass.hpp"
 #include "LoopDependencyAnalysis.hpp"
+#include "Utils.hpp"
 
 #include <system_error>
 #include <functional>
@@ -57,6 +57,7 @@
 
 using namespace llvm;
 using namespace CGRAOmp;
+using namespace CGRAOmp::Utils;
 
 #define DEBUG_TYPE "cgraomp"
 
@@ -521,67 +522,9 @@ PreservedAnalyses VerifyModulePass::run(Module &M, ModuleAnalysisManager &AM)
 	}
 
 
-	
-
 	// there is no modification so it must keep all analysis
 	return PreservedAnalyses::all();
 }
 
 
-#undef DEBUG_TYPE
-
-/* ================= Utility functions ================= */
-LoopStandardAnalysisResults CGRAOmp::getLSAR(Function &F,
-								FunctionAnalysisManager &AM)
-{
-	auto &AA = AM.getResult<AAManager>(F);
-	auto &AC = AM.getResult<AssumptionAnalysis>(F);
-	auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
-	auto &LI = AM.getResult<LoopAnalysis>(F);
-	auto &SE = AM.getResult<ScalarEvolutionAnalysis>(F);
-	auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
-	auto &TTI = AM.getResult<TargetIRAnalysis>(F);
-	BlockFrequencyInfo *BFI = &AM.getResult<BlockFrequencyAnalysis>(F);
-	MemorySSA *MSSA = &AM.getResult<MemorySSAAnalysis>(F).getMSSA();
-
-	return LoopStandardAnalysisResults(
-		{AA, AC, DT, LI, SE, TLI, TTI, BFI, MSSA}
-	);
-}
-
-BranchInst* CGRAOmp::findBackBranch(Loop *L)
- {
-	BasicBlock *Latch = L->getLoopLatch();
-	auto BackBranch = dyn_cast<BranchInst>(Latch->getTerminator());
-	if (!BackBranch || !BackBranch->isConditional()) {
-		return nullptr;
-	} else {
-		return BackBranch;
-	}
- }
-
-void CGRAOmp::getAllGEP(Loop* L, SmallVector<Instruction*> &List)
-{
-	for (auto &BB : L->getBlocks()) {
-		for (auto &I : *BB) {
-			if (auto gep = dyn_cast<GetElementPtrInst>(&I)) {
-				List.emplace_back(gep);
-			}
-		}
-	}
-
-}
-
-SmallVector<int> CGRAOmp::getArrayElementSizes(Type *Ty)
-{
-	SmallVector<int> sizes;
-
-	Type* current_type = Ty;
-	while (auto arr_type = dyn_cast<ArrayType>(current_type)) {
-		sizes.emplace_back(arr_type->getNumElements());
-		current_type = arr_type->getElementType();
-	}
-
-	return std::move(sizes);
-}
 #undef DEBUG_TYPE

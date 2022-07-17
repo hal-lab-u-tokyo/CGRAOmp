@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:00:17
-*    Last Modified: 21-02-2022 03:08:57
+*    Last Modified: 17-07-2022 19:36:44
 */
 #ifndef VerifyPass_H
 #define VerifyPass_H
@@ -48,6 +48,7 @@
 #include "CGRAOmpPass.hpp"
 #include "DecoupledAnalysis.hpp"
 #include "CGRAModel.hpp"
+
 
 #include <map>
 
@@ -532,22 +533,6 @@ namespace CGRAOmp {
 								FunctionAnalysisManager &AM);
 	};
 
-	/**
-	 * @brief a utility function to obtain analysis results in LoopStandardAnalysisResults
-	 * 
-	 * @param F Function
-	 * @param AM FunctionAnalysisManager
-	 * @return LoopStandardAnalysisResults 
-	 */
-	LoopStandardAnalysisResults getLSAR(Function &F,
-								FunctionAnalysisManager &AM);
-
-
-	BranchInst* findBackBranch(Loop *L);
-
-	void getAllGEP(Loop* L, SmallVector<Instruction*> &List);
-
-	SmallVector<int> getArrayElementSizes(Type *Ty);
 }
 
 #endif //VerifyPass_H

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:18:09
-*    Last Modified: 19-02-2022 05:50:00
+*    Last Modified: 17-07-2022 20:00:41
 */
 
 #include "llvm/Support/CommandLine.h"
@@ -92,6 +92,15 @@ cl::opt<int> CGRAOmp::OptMemoryDependencyDistanceThreshold(
 			"memory-dependence-distance-threshold",
 			cl::init(1),
 			cl::desc("Threshold count for how close memory dependency is regarded as a data dependency in data flow graph (Default: 1)"));
+
+cl::opt<bool> CGRAOmp::OptEnableLoopFlatten("cgraomp-loop-flatten",
+			cl::init(false),
+			cl::desc("Enable loop flatten pass for CGRA kernels"));
+
+cl::opt<int> CGRAOmp::OptDFGFloatPrecWidth(
+			"dfg-float-precision-width",
+			cl::init(4),
+			cl::desc("Precision width of floating-point numbers in DOT file (Default: 4)"));
 
 /**
  * @details It parses a string based on a regular expression

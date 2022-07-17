@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 12-07-2022 20:52:39
+*    Last Modified: 17-07-2022 20:07:57
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -37,6 +37,7 @@
 #include "CGRADataFlowGraph.hpp"
 #include "OptionPlugin.hpp"
 #include "common.hpp"
+#include "Utils.hpp" 
 
 #include <system_error>
 #include <regex>
@@ -52,15 +53,16 @@ string ConstantNode::getConstStr() const
 
 	Value* data_src = (skip_seq) ? skip_seq->back() : val;
 	auto type_str = getTypeName(data_src->getType());
-	const char* fmt = "datatype={0},value={1}";
 	
 	if (Constant* const_value = dyn_cast<Constant>(data_src)) {
 		if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
-			return formatv(fmt, type_str, cint->getSExtValue());
+			return formatv("datatype={0},value={1}", type_str, cint->getSExtValue());
 		} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
 			auto apf = cfloat->getValueAPF();
-			double f = apf.convertToDouble();
-			return formatv(fmt, type_str, f);
+			double f = Utils::getFloatValueAsDouble(apf);
+			string fmt = "datatype={0},value={1:f" 
+							+ to_string(OptDFGFloatPrecWidth) + "}";
+			return formatv(fmt.c_str(), type_str, f);
 		} else {
 			LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << " Unexpected constant type: ";
 						const_value->print(dbgs());
@@ -68,7 +70,7 @@ string ConstantNode::getConstStr() const
 			);
 		}
 	} else {
-		return formatv(fmt, type_str, data_src->getNameOrAsOperand());
+		return formatv("datatype={0},value={1}", type_str, data_src->getNameOrAsOperand());
 	}
 	return "";
 }

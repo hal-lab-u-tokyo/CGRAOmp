@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 12-07-2022 18:23:00
+*    Last Modified: 17-07-2022 20:34:16
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -51,6 +51,7 @@
 #include "DecoupledAnalysis.hpp"
 #include "LoopDependencyAnalysis.hpp"
 #include "AGVerifyPass.hpp"
+#include "Utils.hpp"
 
 #include "BalanceTree.hpp"
 
@@ -60,6 +61,7 @@
 
 using namespace llvm;
 using namespace CGRAOmp;
+using namespace CGRAOmp::Utils;
 
 #define DEBUG_TYPE "cgraomp"
 
@@ -615,6 +617,7 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		auto ptr = gep->getPointerOperand();
 		auto sizes = getArrayElementSizes(gep->getSourceElementType());
 		SmallVector<int> inc;
+		errs() << formatv("sizes {0}\n", make_range(sizes.begin(), sizes.end()));
 		for (auto i = sizes.rbegin(); i != sizes.rend(); i++) {
 			int total = 1;
 			for (auto j = sizes.rbegin(); j <= i; j++) {
@@ -623,6 +626,7 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 			inc.insert(inc.begin(), total);
 		}
 		inc.emplace_back(1);
+		errs() << formatv("inc {0}\n", make_range(inc.begin(), inc.end()));
 
 		DFGNode *base_addr;
 		if (!is_node_exist(ptr)) {
@@ -635,7 +639,7 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 
 		int i = 0;
 		DFGNode* last = nullptr;
-		for (auto idx = gep->idx_begin(); idx != gep->idx_end(); idx++) {
+		for (auto idx = gep->idx_begin(); idx != gep->idx_end(); idx++, i++) {
 			if (auto inst_indice = dyn_cast<Instruction>(idx)) {
 				if (all_blocks.contains(inst_indice->getParent())) {
 					auto indice_node = value_to_node[inst_indice];
