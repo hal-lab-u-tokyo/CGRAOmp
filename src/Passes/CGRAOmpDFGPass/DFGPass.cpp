@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 21-02-2022 06:03:36
+*    Last Modified: 12-07-2022 18:23:00
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -188,6 +188,8 @@ PreservedAnalyses DFGPassHandler::run(Module &M, ModuleAnalysisManager &AM)
 		parent = ".";
 	}
 
+	StringMap<int> kernel_count;
+
 	// obtain OpenMP kernels
 	auto &kernel_info = AM.getResult<OmpKernelAnalysisPass>(M);
 	auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
@@ -227,7 +229,8 @@ PreservedAnalyses DFGPassHandler::run(Module &M, ModuleAnalysisManager &AM)
 		
 		if (OptUseSimpleDFGName && md != kernel_info.md_end()) {
 			// use original function name instead of offloading function name
-			label = formatv("{0}_{1}", module_name, md->func_name);
+			label = formatv("{0}_{1}_{2}", module_name, md->func_name,
+											md->order);
 		} else {
 			label = formatv("{0}_{1}", module_name, offload_func->getName());
 		}

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  18-02-2022 18:14:28
-*    Last Modified: 20-02-2022 22:37:54
+*    Last Modified: 17-07-2022 17:28:59
 */
 #include "LoopDependencyAnalysis.hpp"
 #include "OptionPlugin.hpp"
@@ -128,6 +128,10 @@ LoopDependencyAnalysisPass::Result LoopDependencyAnalysisPass::run(Loop &L, Loop
 					// treat it as data dependency
 					auto MDep = new MemoryLoopDependency(def, use, *Dist);
 					result.add_mem_dep(MDep);
+				} else {
+					LLVM_DEBUG(
+						dbgs() << INFO_DEBUG_PREFIX << "detect loop-carried dependency via memory access but distance "  << *Dist << " is larger than the threshold " << OptMemoryDependencyDistanceThreshold << "\n";
+					);
 				}
 			} else {
 				// cannot compute distance

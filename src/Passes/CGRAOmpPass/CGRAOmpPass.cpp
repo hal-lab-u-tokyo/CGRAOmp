@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 14:19:22
-*    Last Modified: 22-02-2022 04:19:59
+*    Last Modified: 30-06-2022 14:09:33
 */
 #include "common.hpp"
 #include "CGRAOmpPass.hpp"
@@ -283,7 +283,6 @@ AnalysisKey OmpStaticShecudleAnalysis::Key;
 OmpStaticShecudleAnalysis::Result
 OmpStaticShecudleAnalysis::run(Function &F, FunctionAnalysisManager &AM)
 {
-	errs() << "search for schedule for " << F.getName();
 	// find calling __kmpc_for_static_init*
 	CallBase *init_call = nullptr;
 	for (auto &BB : F) {

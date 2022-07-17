@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  01-02-2022 11:44:11
-*    Last Modified: 17-02-2022 15:16:35
+*    Last Modified: 07-07-2022 21:40:51
 */
 #include "common.hpp"
 #include "DFGPass.hpp"
@@ -37,6 +37,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/ADT/PriorityQueue.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/ADT/SetVector.h"
 
 #include <algorithm>
 #include <queue>
@@ -69,6 +70,7 @@ bool BalanceTree::run(CGRADFG &G, Loop &L, FunctionAnalysisManager &FAM,
 {
 	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Running Balance Tree Optimization for "
 				<< G.getName() << "\n");
+
 	// reset status
 	visited.clear();
 	weight.clear();
@@ -153,13 +155,15 @@ SmallVector<ComputeNode*> BalanceTree::findRootCandidates(CGRADFG &G)
 				[&](const auto &lhs, const auto &rhs){ 
 					return getOperatorPrecedence(lhs) < getOperatorPrecedence(rhs);
 				});
+
 	return candidates;
 }
 
 void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 {
 	queue<DFGNode*> worklist;
-	SmallVector<DFGNode*> replaced;
+	SetVector<DFGNode*> replaced;
+
 	// lammda for sorting priority queue of DFGNode*
 	// lowest weighted node is first
 	auto compare = [&](DFGNode* lhs, DFGNode *rhs) {
@@ -196,7 +200,7 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 				}
 				leaves.push(T);
 			} else if (comp_node->getInst()->getOpcode() == Root->getInst()->getOpcode()) {
-				replaced.push_back(comp_node);
+				replaced.insert(comp_node);
 				if (G.findIncomingEdgesToNode(*T, in_edges, true)) {
 					for (auto EI : in_edges) {
 						auto Src = EI.first;
@@ -209,13 +213,23 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 	}
 
 	// nothing to do
-	if (leaves.size() == 0 ) return;
+	if (leaves.size() < 2 ) {
+		return;
+	}
 
 	changed = true;
 	// disconnect the nodes
 	for (auto N : replaced) {
-		G.removeNode(*N);
-		N->clear();
+		if (G.findIncomingEdgesToNode(*N, in_edges, true)) {
+			for (auto EI : in_edges) {
+				if (replaced.contains(EI.first))  {
+					for (auto E : EI.second) {				
+						EI.first->removeEdge(*E);
+					}
+				}
+			}
+		}
+		in_edges.clear();
 	}
 
 	int pos = 0;
@@ -230,7 +244,6 @@ void BalanceTree::toBalanced(CGRADFG &G, ComputeNode* Root)
 							Ra1->getUniqueName(),
 							Rb1->getUniqueName(),
 							T->getUniqueName()));
-		G.addNode(*T);
 		G.connect(*Ra1, *T, *(new DFGEdge(*T, 0)));
 		G.connect(*Rb1, *T, *(new DFGEdge(*T, 1)));
 		leaves.push(T);

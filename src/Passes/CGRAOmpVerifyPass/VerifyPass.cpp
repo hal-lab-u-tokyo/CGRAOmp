@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:52
-*    Last Modified: 21-02-2022 03:06:47
+*    Last Modified: 07-07-2022 19:59:09
 */
 
 #include "llvm/ADT/SetOperations.h"
@@ -179,7 +179,7 @@ AnalysisKey TimeMultiplexedVerifyPass::Key;
 VerifyResult TimeMultiplexedVerifyPass::run(Function &F, FunctionAnalysisManager &AM)
 {
 	LLVM_DEBUG(dbgs() << INFO_DEBUG_PREFIX << "Verifying "
-				 << F.getName() << "for time-multiplexed CGRA\n");
+				 << F.getName() << " for time-multiplexed CGRA\n");
 	VerifyResult result;
 
 

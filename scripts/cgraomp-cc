@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 19-06-2022 20:16:41
+#   Last Modified: 12-07-2022 18:05:42
 ###
 
 from argparse import ArgumentParser
@@ -44,6 +44,8 @@ from collections import defaultdict
 
 installed_dir = str(Path(__file__).parent.parent.absolute())
 default_libdir = installed_dir + "/lib"
+config_preset_dir = installed_dir + "/share/presets"
+include_dir = installed_dir + "/include/cgraomp/"
 
 sys.path.append(default_libdir)
 
@@ -140,6 +142,8 @@ def parser():
     argparser.add_argument("--enable-custom-inst", dest="custominst_en", \
             action="store_true", \
             help="Enable user-defiend custom instructions to generate DFG")
+    argparser.add_argument("--diagnostic-file", 
+            help="Save diagnostic information to the spcified file")
     # for DFGs
     argparser.add_argument("--load-dfg-pass-plugin", type=str, nargs="*", \
                             help="list of paths of DFG Pass plugins")
@@ -154,6 +158,8 @@ def parser():
                             help="File format for the DFG visulization (default: png)")
     argparser.add_argument("--simplify-dfg-name", action="store_true",
                             help="Use simplified file name for DFGs")
+    argparser.add_argument("--cgra-dfg-plain", action="store_true",
+                            help="Use plain node label")
     # to connect back-end mapper
     argparser.add_argument("--backend-runner", type=str,
                             help="Specify a runner script to drive a back-end mapping")
@@ -221,6 +227,11 @@ def parseCGRAOmpArgs(args):
         options.append("-dfg-file-prefix=" + args.dfg_file_prefix)
     if args.simplify_dfg_name:
         options.append("--simplify-dfg-name")
+    if args.diagnostic_file:
+        options.append("--pass-remarks-output=" + args.diagnostic_file)
+        options.append("--pass-remarks-filter=cgraomp")
+    if args.cgra_dfg_plain:
+        options.append("--cgra-dfg-plain")
 
     options.extend(args.cgraomp_args)
     return options
@@ -260,7 +271,7 @@ def run(msg, cmd, verbose = False, childEnv = os.environ):
 def clangIn(sources, outfile, arch, extra_args, verbose):
     pass_args = [ _ for _ in extra_args ]
     cmd = ["clang", "-O0", "-S", "-emit-llvm", "-Xclang",
-            "-disable-O0-optnone", "-fopenmp"]
+            "-disable-O0-optnone", "-fopenmp", f"-I{include_dir}"]
 
     # color output preference
     if "-fno-diagnostics-color" not in extra_args:
@@ -309,6 +320,27 @@ def unbundle(source, host_out, cgra_out, arch, verbose):
                     OMP_TARGET_FMT.format(target = arch))]
     return run("OpenMP target unbundling", cmd, verbose)
 
+
+def search_config(config):
+    # check if it is a valid path
+    p = Path(config)
+    if p.exists():
+        if not p.is_file():
+            print(ERROR_STR, config, "is not a file")
+            sys.exit(1)
+        else:
+            return str(p)
+    else:
+        # search for the file in presets
+        preset = Path(config_preset_dir + "/" + p.name)
+        if preset.exists():
+            return str(preset)
+        else:
+            print(ERROR_STR, "No such a config file: ", config)
+            sys.exit(1)
+
+
+
 def passCGRAOmp(infile, outfile, libpath, config, options, args, verbose):
 
     cmd = ["opt", "-S"]
@@ -319,9 +351,9 @@ def passCGRAOmp(infile, outfile, libpath, config, options, args, verbose):
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpPass.so"]
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpVerifyPass.so"]
     cmd += ["-load-pass-plugin", f"{libpath}/libCGRAOmpDFGPass.so"]
-    cmd += ["-passes=module(cgraomp)", "--cgra-dfg-plain"]
+    cmd += ["-passes=module(cgraomp)"]
 #    cmd += ["--debug-pass-manager"]
-    cmd += ["-cm", config]
+    cmd += ["-cm", search_config(config)]
     cmd += [infile]
     cmd += ["-o", outfile]
     cmd += options

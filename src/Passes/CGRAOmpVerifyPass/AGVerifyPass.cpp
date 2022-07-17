@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-02-2022 13:01:22
-*    Last Modified: 22-02-2022 06:24:11
+*    Last Modified: 30-06-2022 14:03:27
 */
 
 #include "AGVerifyPass.hpp"
@@ -170,6 +170,7 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, LoopStandardAnalysisResults &A
 		C.valid = false;
 	};
 
+
 	// depth first search
 	while (!scev_stack.empty()) {
 		bool end_addrec_prev = end_addrec;
@@ -180,7 +181,6 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, LoopStandardAnalysisResults &A
 		switch (scev->getSCEVType()) {
 			case scAddRecExpr:
 			{
-				// errs() << "add rec\n";
 				if (end_addrec) {
 					// unexpected addrec
 					invalidate();
@@ -216,8 +216,6 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, LoopStandardAnalysisResults &A
 			{
 				end_addrec = true;
 				const auto SA = dyn_cast<SCEVCommutativeExpr>(scev);
-				// errs() << "scev add or mul operand  " << SA->getNumOperands() << " ";
-				// scev->dump();
 				for (const auto operand : SA->operands()) {
 					// operand->dump();
 					scev_stack.emplace_back(operand);
@@ -231,11 +229,7 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, LoopStandardAnalysisResults &A
 			{
 				end_addrec = true;
 				const auto SC = dyn_cast<SCEVCastExpr>(scev);
-				// errs() << "cast\n";
-				// errs() << "operand " << SC->getNumOperands();
-				// scev->dump();
 				for (const auto operand : SC->operands()) {
-					// operand->dump();
 					scev_stack.emplace_back(operand);
 				}
 			} break; // end scSignExtend,scTruncate,scZeroExtend,scPtrToInt
@@ -245,9 +239,11 @@ void CGRAOmp::verifySCEVAsAffineAG(const SCEV* S, LoopStandardAnalysisResults &A
 			case scUnknown:
 			{
 				end_addrec = true;
-				// errs() << "unknown\n";
 				const auto* SU = dyn_cast<SCEVUnknown>(scev);
 				auto *val = SU->getValue();
+				if (C.base == nullptr) {
+					C.base = val;
+				}
 			} break; // end scUnknown
 			default:
 				// errs() << "scev type " << scev->getSCEVType() << "\n";

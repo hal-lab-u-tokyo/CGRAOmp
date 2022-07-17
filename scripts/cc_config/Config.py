@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #   Created Date:  09-02-2022 10:12:26
-#   Last Modified: 22-02-2022 04:19:27
+#   Last Modified: 07-07-2022 22:32:56
 ###
 
 TARGET_FMT = "{target}-unknown-linux-gnu"
@@ -56,5 +56,5 @@ PRE_OPTS_O0 = [["-polly-canonicalize"]]
 
 # default setting for pre optimization when -O1 or higher level is specified
 PRE_OPTS = []
-PRE_OPTS.append(["--indvars", "--indvars-widen-indvars", "--aa-pipeline=\"basic-aa,scoped-noalias-aa,tbaa,globals-aa,scev-aa\"", "-loop-unroll", "--unroll-allow-partial", "-simplifycfg", "-loop-simplify", "-loop-idiom", "-loop-instsimplify", "-loop-rotate", "-mem2reg", "-instcombine", "-loop-load-elim", "-instsimplify", "--early-cse", "--early-cse-memssa", "-dce",  "--scalar-evolution", "-memoryssa", "-gvn", "-constmerge", "-simplifycfg", "-reassociate", "-instcombine", "-mldst-motion", "-polly-canonicalize"])
+PRE_OPTS.append(["--inferattrs", "--indvars", "--indvars-widen-indvars", "--aa-pipeline=\"basic-aa,scoped-noalias-aa,tbaa,globals-aa,scev-aa\"", "-loop-unroll", "--unroll-allow-partial", "-simplifycfg", "-loop-simplify", "-loop-idiom", "-loop-instsimplify", "-loop-rotate", "-mem2reg", "-instcombine", "-loop-load-elim", "-instsimplify", "--early-cse", "--early-cse-memssa", "-dce",  "--scalar-evolution", "-memoryssa", "-gvn", "-constmerge", "-simplifycfg", "-reassociate", "-instcombine", "-mldst-motion", "-polly-canonicalize"])
 

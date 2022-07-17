@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 21-02-2022 06:29:34
+*    Last Modified: 12-07-2022 18:21:14
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -187,40 +187,30 @@ namespace llvm {
 			std::string opcode;
 	};
 
-	template<DFGNode::NodeKind KIND>
 	class MemAccessNode : public DFGNode {
 		public:
-			MemAccessNode(Value *addr) : 
-					DFGNode(KIND, addr) {
-				_isLoad = KIND == DFGNode::NodeKind::MemLoad;
+			MemAccessNode(LoadInst *load) : 
+					DFGNode(DFGNode::NodeKind::MemLoad, load) {
+				_isLoad = true;
+			}
+
+			MemAccessNode(StoreInst *store) :
+					DFGNode(DFGNode::NodeKind::MemStore, store) {
+				_isLoad = false;
 			}
 
 			inline bool isLoad() { return _isLoad;}
 
 			string getUniqueName() const {
-				switch (KIND) {
-					case DFGNode::NodeKind::MemLoad:
-						return  "Load_" + to_string(getID());
-					case DFGNode::NodeKind::MemStore:
-						return  "Store_" + to_string(getID());
-					default:
-						assert("Unexprected node kind for memory access node");
-						return "";
+				if (_isLoad) {
+					return  "Load_" + to_string(getID());
+ 				} else {
+					return  "Store_" + to_string(getID());
 				}
 			}
+			
 			string getNodeAttr() const {
-				string type;
-				switch (KIND) {
-					case DFGNode::NodeKind::MemLoad:
-						type = "input";
-						break;
-					case DFGNode::NodeKind::MemStore:
-						type = "output";
-						break;
-					default:
-						assert("Unexprected node kind for memory access node");
-						return "";
-				}
+				string type = (_isLoad) ? "input" : "output";
 				return formatv("type={0},data={1}", type, getSymbol());
 			}
 

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  05-09-2021 18:38:43
-*    Last Modified: 20-02-2022 08:45:16
+*    Last Modified: 12-07-2022 20:02:20
 */
 
 
@@ -298,7 +298,9 @@ StringMap<InstMap::entry_generator> InstMap::entry_gen({
 	BINOP_ENTRY("or", Or), BINOP_ENTRY("xor", Xor),
 	COMPOP_ENTRY("icmp", true), COMPOP_ENTRY("fcmp", false),
 	MEMOP_ENTRY("load", Load), MEMOP_ENTRY("store", Store),
-	OTHEROP_ENTRY("select", Instruction::OtherOps::Select)
+	OTHEROP_ENTRY("select", Instruction::OtherOps::Select),
+	OTHEROP_ENTRY("bitcast", Instruction::CastOps::BitCast),
+	OTHEROP_ENTRY("zext", Instruction::CastOps::ZExt),
 });
 
 

@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 29-06-2022 18:50:27
+*    Last Modified: 12-07-2022 20:52:39
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -52,15 +52,14 @@ string ConstantNode::getConstStr() const
 
 	Value* data_src = (skip_seq) ? skip_seq->back() : val;
 	auto type_str = getTypeName(data_src->getType());
-	//const char* fmt = "datatype=\"{0}\",value=\"{1}\"";
-	const char* fmt = "{0}={1}";
-
+	const char* fmt = "datatype={0},value={1}";
+	
 	if (Constant* const_value = dyn_cast<Constant>(data_src)) {
 		if (auto *cint = dyn_cast<ConstantInt>(const_value)) {
 			return formatv(fmt, type_str, cint->getSExtValue());
 		} else if (auto *cfloat = dyn_cast<ConstantFP>(const_value)) {
 			auto apf = cfloat->getValueAPF();
-			float f = apf.convertToFloat();
+			double f = apf.convertToDouble();
 			return formatv(fmt, type_str, f);
 		} else {
 			LLVM_DEBUG(dbgs() << ERR_DEBUG_PREFIX << " Unexpected constant type: ";
@@ -83,7 +82,7 @@ string GlobalDataNode::getDataStr() const
  {
 	Value* data_src = (skip_seq) ? skip_seq->back() : val;
 	auto type_str = getTypeName(data_src->getType());
-	return formatv("datatype=\"{0}\",value=\"{1}\"", type_str, data_src->getNameOrAsOperand());
+	return formatv("datatype={0},value={1}", type_str, data_src->getNameOrAsOperand());
 }
 
 string GlobalDataNode::getNodeAttr() const {

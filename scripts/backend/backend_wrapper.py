@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 #   Created Date:  18-06-2022 21:03:38
-#   Last Modified: 29-06-2022 21:00:05
+#   Last Modified: 30-06-2022 13:38:38
 ###
 
 try:
@@ -55,6 +55,7 @@ import re
 escape_finder = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 cursor_up_finder = re.compile(r'\x1B\[A')
 
+from .decorder import decode
 
 def backend_wrapper(files, cmd, panel_num, proc_num, nowait):
     jobs = []
@@ -164,14 +165,14 @@ class BackendJob():
         """read lines from subprocess stdout"""
         if width is not None:
             lines = []
-            for l in self.__decode():
+            for l in decode(self.buf):
                 if len(l) > width:
                     lines.append(l[:width])
                     lines.append(l[width:])
                 else:
                     lines.append(l)
         else:
-            lines = self.__decode()
+            lines = decode(self.buf)
 
         if max_lines is None:
             max_lines = len(lines)
@@ -187,29 +188,28 @@ class BackendJob():
         except IOError as e:
             pass
         return rdata
-    def debug(self):
-        for i in range(len(self.buf)):
-            print(self.buf[i], hex(self.buf[i]))
+
             
-    def __decode(self) -> List[str]:
-        """decode buffered bytes to string"""
-        lines = []
-        prev = 0
-        for i in range(len(self.buf)):
-            c = self.buf[i]
+    # def __decode(self) -> List[str]:
+    #     """decode buffered bytes to string"""
+    #     lines = []
+    #     prev = 0
+    #     for i in range(len(self.buf)):
+    #         c = self.buf[i]
 
-            if c == b'\n'[0]:
-                lines.append(self.buf[prev:i].decode())
-                prev = i + 1
-            elif c == b'\r'[0]:
-                prev = i + 1
+    #         if c == b'\n'[0]:
+    #             lines.append(self.buf[prev:i].decode())
+    #             prev = i + 1
+    #         elif c == b'\r'[0]:
+    #             prev = i + 1
 
-        if prev < len(self.buf):
-            lines.append(self.buf[prev:].decode())
+    #     if prev < len(self.buf):
+    #         lines.append(self.buf[prev:].decode())
 
-        escape_lines = [escape_finder.sub('', l) for l in lines]
+    #     escape_lines = [escape_finder.sub('', l) for l in lines]
 
-        return escape_lines
+    #     return escape_lines
+
 
 class StatusPanel():
     def __init__(self, jobs : List[BackendJob]):
@@ -268,7 +268,7 @@ class JobScreen:
         except KeyError:
             c = Console()
             return (c.width, c.height)
-        return (region.width, region.height)
+        return (region.width - 4, region.height - 2)
 
     def update(self, attach_job : BackendJob):
         """redraw the screen"""
