@@ -1,0 +1,90 @@
+
+# ==================================================
+#       ____            __  __             
+#      / ___| ___ _ __ |  \/  | __ _ _ __  
+#     | |  _ / _ \ '_ \| |\/| |/ _` | '_ \ 
+#     | |_| |  __/ | | | |  | | (_| | |_) |
+#      \____|\___|_| |_|_|  |_|\__,_| .__/ 
+#                                   |_|   
+# ==================================================
+
+    Copyright (c) 2021 Amano laboratory, Keio University
+    Launching... PID: 490506
+    
+overwrite conv_convolution3x3_omp.inner.for.body.dump y/n? >> WARN: ECOS might be fail to solve a convex problem for a certain condition
+  0%|                                                                                          | 0/10 [00:00<?, ?it/s]
+Wire_Length: [A
+
+Mapping_Width: [A[A
+
+
+Op_Mapping_Width: [A[A[A
+
+
+
+Power_Consumption: [A[A[A[A
+
+
+
+
+Time_Slack: [A[A[A[A[AInitilizing:   0%|                                                                             | 0/10 [00:00<?, ?it/s]Generation 1:   0%|                                                                            | 0/10 [00:02<?, ?it/s]Generation 1:   0%|                                                        | 0/10 [00:07<?, ?it/s, hof_len=5, stall=0]Generation 1:  10%|████▊                                           | 1/10 [00:07<01:10,  7.79s/it, hof_len=5, stall=0]
+Wire_Length: , max=4.1e+4, min=52.2[A
+
+Mapping_Width: , max=7, min=7[A[A
+
+
+Op_Mapping_Width: , max=6, min=2[A[A[A
+
+
+
+Power_Consumption: , max=1e+3, min=0[A[A[A[A
+
+
+
+
+Time_Slack: , max=1e+3, min=-1e+3[A[A[A[A[AGeneration 2:  10%|████▊                                           | 1/10 [00:07<01:10,  7.79s/it, hof_len=5, stall=0]Generation 2:  10%|████▊                                           | 1/10 [00:13<01:10,  7.79s/it, hof_len=5, stall=1]Generation 2:  20%|█████████▌                                      | 2/10 [00:13<00:57,  7.19s/it, hof_len=5, stall=1]
+Wire_Length: , max=4.1e+4, min=52.2[A
+
+Mapping_Width: , max=7, min=7[A[A
+
+
+Op_Mapping_Width: , max=6, min=2[A[A[A
+
+
+
+Power_Consumption: , max=1e+3, min=0[A[A[A[A
+
+
+
+
+Time_Slack: , max=1e+3, min=-1e+3[A[A[A[A[AGeneration 3:  20%|█████████▌                                      | 2/10 [00:13<00:57,  7.19s/it, hof_len=5, stall=1]Generation 3:  20%|█████████▌                                      | 2/10 [00:18<00:57,  7.19s/it, hof_len=5, stall=2]Generation 3:  30%|██████████████▍                                 | 3/10 [00:18<00:46,  6.66s/it, hof_len=5, stall=2]
+Wire_Length: , max=4.1e+4, min=52.2[A
+
+Mapping_Width: , max=7, min=7[A[A
+
+
+Op_Mapping_Width: , max=6, min=2[A[A[A
+
+
+
+Power_Consumption: , max=1e+3, min=0[A[A[A[A
+
+
+
+
+Time_Slack: , max=1e+3, min=-1e+3[A[A[A[A[AGeneration 4:  30%|██████████████▍                                 | 3/10 [00:18<00:46,  6.66s/it, hof_len=5, stall=2]Generation 4:  30%|██████████████▍                                 | 3/10 [00:24<00:46,  6.66s/it, hof_len=6, stall=0]Generation 4:  40%|███████████████████▏                            | 4/10 [00:24<00:37,  6.27s/it, hof_len=6, stall=0]
+Wire_Length: , max=4.1e+4, min=52.2[A
+
+Mapping_Width: , max=7, min=7[A[A
+
+
+Op_Mapping_Width: , max=6, min=2[A[A[A
+
+
+
+Power_Consumption: , max=1e+3, min=0[A[A[A[A
+
+
+
+
+Time_Slack: , max=1e+3, min=-1e+3[A[A[A[A[AGeneration 5:  40%|███████████████████▏                            | 4/10 [00:24<00:37,  6.27s/it, hof_len=6, stall=0]
