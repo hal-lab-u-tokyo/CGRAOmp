@@ -23,7 +23,7 @@
 *    
 *    File:          /src/Passes/CGRAModel/CGRAModel.cpp
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  27-08-2021 15:03:46
 *    Last Modified: 14-02-2022 15:33:58
 */

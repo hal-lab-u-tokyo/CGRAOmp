@@ -23,7 +23,7 @@
 *    
 *    File:          /src/Passes/CGRAOmpDFGPass/DFGPass.cpp
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
 *    Last Modified: 17-07-2022 20:34:16
 */

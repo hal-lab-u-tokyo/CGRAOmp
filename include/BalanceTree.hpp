@@ -23,7 +23,7 @@
 *    
 *    File:          /include/BalanceTree.hpp
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  01-02-2022 11:45:50
 *    Last Modified: 07-02-2022 16:11:05
 */

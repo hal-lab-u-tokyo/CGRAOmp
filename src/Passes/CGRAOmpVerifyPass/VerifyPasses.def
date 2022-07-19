@@ -23,7 +23,7 @@
 *    
 *    File:          /src/Passes/CGRAOmpVerifyPass/VerifyPasses.def
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  14-12-2021 12:50:15
 *    Last Modified: 21-02-2022 03:11:29
 */

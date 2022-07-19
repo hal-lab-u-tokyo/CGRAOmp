@@ -23,7 +23,7 @@
 *    
 *    File:          /src/Passes/CGRAOmpDFGPass/BalanceTree.cpp
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  01-02-2022 11:44:11
 *    Last Modified: 07-07-2022 21:40:51
 */

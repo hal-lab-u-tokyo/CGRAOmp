@@ -23,7 +23,7 @@
 *    
 *    File:          /src/Passes/CGRAOmpVerifyPass/DecoupledAnalysis.cpp
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  14-12-2021 11:38:23
 *    Last Modified: 18-02-2022 04:19:17
 */

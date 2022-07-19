@@ -23,7 +23,7 @@
 #    
 #    File:          /src/Passes/CGRAOmpPass/CMakeLists.txt
 #    Project:       CGRAOmp
-#    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+#    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 #    Created Date:  27-08-2021 14:16:34
 #    Last Modified: 15-12-2021 11:50:47
 #

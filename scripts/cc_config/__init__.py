@@ -26,7 +26,7 @@
 #   
 #   File:          /scripts/cc-config/__init__.py
 #   Project:       CGRAOmp
-#   Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+#   Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 #   Created Date:  09-02-2022 10:12:18
 #   Last Modified: 09-02-2022 10:13:17
 ###

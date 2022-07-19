@@ -23,7 +23,7 @@
 *    
 *    File:          /include/CGRAOmpPass.hpp
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  27-08-2021 14:19:42
 *    Last Modified: 22-02-2022 03:38:11
 */

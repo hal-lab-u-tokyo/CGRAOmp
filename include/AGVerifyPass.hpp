@@ -23,7 +23,7 @@
 *    
 *    File:          /include/AGVerifyPass.hpp
 *    Project:       CGRAOmp
-*    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
+*    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-02-2022 13:23:43
 *    Last Modified: 22-02-2022 06:18:30
 */
