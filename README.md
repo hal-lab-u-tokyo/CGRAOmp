@@ -1,6 +1,6 @@
 ![MIT license](https://img.shields.io/github/license/hal-lab-u-tokyo/CGRAOmp?style=plastic)
 ![build workflow](https://github.com/hal-lab-u-tokyo/CGRAOmp/actions/workflows/build.yml/badge.svg)
-![latest release](https://img.shields.io/github/v/release/hal-lab-u-tokyo/CGRAOmp)
+![latest release](https://img.shields.io/github/v/release/hal-lab-u-tokyo/CGRAOmp?include_prereleases)
 # CGRAOmp: OpenMP Compiler for CGRAs
 CGRAOmp is a front-end to compile OpenMP codes for Coarse-Grained Reconfigurable Architectures (CGRAs) based on LLVM.
 
