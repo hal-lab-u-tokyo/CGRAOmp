@@ -75,12 +75,12 @@ This repository includes the following types in [share/presents](share/presets/)
 ## Sample code (vec_madd.c)
 ```
 #define N 100
-int X[N], Y[N], C[N]
-const int x = 3;
+int X[N], Y[N], Z[N]
+const int a = 3;
 
 #pragma omp target parallel for map(to:A[0:N],B[0:N]) map(from:C[0:N])
 for (int i = 0; i < N; i++) {
-	C[i] = A[i] * x + B[i];
+	Z[i] = X[i] * a + Y[i];
 }
 ```
 ## Compilation commmad
@@ -96,7 +96,7 @@ To run mapping with the generated DFGs automatically, a script file is needed.
 ```
 #!/bin/sh
 
-mapping_command ${DOTFILE_NAME}
+your_mapping_command ${DOTFILE_NAME}
 ```
 
 In the script, an environment variable `${DOTFILE_NAME}` provides an actual file name of the generated DFG file.
