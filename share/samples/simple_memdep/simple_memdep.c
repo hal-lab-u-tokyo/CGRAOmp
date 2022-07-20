@@ -25,14 +25,10 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  08-09-2021 14:17:51
-*    Last Modified: 20-07-2022 14:33:45
+*    Last Modified: 20-07-2022 16:35:46
 */
 #include <stdio.h>
 #include <cgraomp.h>
-
-CGRAOMP_CUSTOM_INST_INLINE double fsin(double x) {
-	return sin(x);
-}
 
 #define N 1024
 #define DEP_N 1

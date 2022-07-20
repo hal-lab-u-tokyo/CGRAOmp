@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 #   Created Date:  18-06-2022 21:03:38
-#   Last Modified: 20-07-2022 15:37:09
+#   Last Modified: 20-07-2022 16:34:43
 ###
 
 try:
@@ -41,8 +41,16 @@ try:
     rich_available = True
 except ImportError:
     rich_available = False
+    Panel = None
+    Layout = None
+    Console = None
+    Table = None
+    Live = None
+    Status = None
+
 
 from cProfile import run
+from cmath import inf
 from glob import escape
 from time import sleep
 from typing import List, Tuple, Dict, Set
@@ -89,9 +97,12 @@ class BackendJob():
         self.proc : subprocess.Popen = None
         self.finished = False
         self.started = False
-        c = Console()
-        self.col_size = c.width
-        self.row_size = c.height
+        if rich_available:
+            c = Console()
+            self.col_size = c.width
+            self.row_size = c.height
+        else:
+            (self.col_size, self.row_size) = os.get_terminal_size() 
         self.returncode = 0
         self.cmd = cmd
 
