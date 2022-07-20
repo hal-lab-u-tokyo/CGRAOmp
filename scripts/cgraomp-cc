@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 #   Created Date:  15-09-2021 17:22:43
-#   Last Modified: 12-07-2022 18:05:42
+#   Last Modified: 20-07-2022 15:13:40
 ###
 
 from argparse import ArgumentParser
@@ -80,7 +80,7 @@ try:
         
     def end_watchdog():
         observer.stop()
-        if (observer.isAlive()):
+        if (observer.is_alive()):
             observer.join()
         
 except ModuleNotFoundError:
@@ -171,6 +171,8 @@ def parser():
                             help="specify the number of panel to view the backend process stdout")
     argparser.add_argument("--backend-nowait", action="store_true",
                             help="Finish immediately when all the backend processes are finished")
+    argparser.add_argument("--no-rich-console", action="store_true",
+                            help="Not use Rich console for backend process")
 
     # for other options
     argparser.add_argument("-Xcgraomp", dest="cgraomp_args", \
@@ -387,8 +389,7 @@ def visualizeDFG(type, vervose):
             break
 
         if result is not None:
-            if vervose:
-                msg += "\tGenerate a visualized data-flow-graph: {0}\n".format(result)
+            msg += "\tGenerate a visualized data-flow-graph: {0}\n".format(result)
         else:
             msg = "\tGraphviz might not be install\n"
             success = False
@@ -517,7 +518,8 @@ def main():
             cmd = [args.backend_runner_command, args.backend_runner]
             backend_wrapper(dot_list, cmd, \
                             args.backend_panel_num, args.backend_proc_num,
-                            args.backend_nowait)
+                            args.backend_nowait,
+                            args.no_rich_console)
 
 
 def addImmFile(f):

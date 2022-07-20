@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  17-07-2022 19:02:30
-*    Last Modified: 17-07-2022 20:16:29
+*    Last Modified: 20-07-2022 11:32:04
 */
 #ifndef CGRAOMP_UTILS_H
 #define CGRAOMP_UTILS_H
@@ -60,7 +60,7 @@ namespace CGRAOmp {
 
 		void getAllGEP(Loop* L, SmallVector<Instruction*> &List);
 
-		SmallVector<int> getArrayElementSizes(Type *Ty);
+		void getArrayElementSizes(Type *Ty, SmallVector<int> &sizes, Type* &element_type);
 
 		int getFloatDataWidth(const APFloat f);
 

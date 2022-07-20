@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  17-07-2022 19:01:36
-*    Last Modified: 17-07-2022 20:16:43
+*    Last Modified: 20-07-2022 11:33:19
 */
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -88,17 +88,13 @@ void Utils::getAllGEP(Loop* L, SmallVector<Instruction*> &List)
 
 }
 
-SmallVector<int> Utils::getArrayElementSizes(Type *Ty)
+void Utils::getArrayElementSizes(Type *Ty, SmallVector<int> &sizes, Type* &element_type)
 {
-	SmallVector<int> sizes;
-
-	Type* current_type = Ty;
-	while (auto arr_type = dyn_cast<ArrayType>(current_type)) {
+	element_type = Ty;
+	while (auto arr_type = dyn_cast<ArrayType>(element_type)) {
 		sizes.emplace_back(arr_type->getNumElements());
-		current_type = arr_type->getElementType();
+		element_type = arr_type->getElementType();
 	}
-
-	return std::move(sizes);
 }
 
 int Utils::getFloatDataWidth(const APFloat f) 

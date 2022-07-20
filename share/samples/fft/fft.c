@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  14-02-2022 09:57:29
-*    Last Modified: 07-07-2022 20:00:53
+*    Last Modified: 20-07-2022 14:35:48
 */
 #include <cgraomp.h>
 #include <math.h>
@@ -58,7 +58,7 @@ void fft_stockham_radix2(float * in_re, float * in_im, float *out_re, float *out
 	#pragma omp target update to(in_re[0:N], in_im[0:N])
 
 	for (i = 0; i < LOG_N; i++) {
-        for (j = 0; j < l; j++) {
+		for (j = 0; j < l; j++) {
 			const float W_re = cosf(-2 * PI * j / (2 * l));
 			const float W_im = sinf(-2 * PI * j / (2 * l));
 			#pragma omp target parallel for private(k) shared(l,m,j)
@@ -101,7 +101,7 @@ void fft_stockham_radix3(float * in_re, float * in_im, float *out_re, float *out
 	#pragma omp target update to(in_re[0:N], in_im[0:N])
 
 	for (i = 0; i < LOG_N; i++) {
-        for (j = 0; j < l; j++) {
+		for (j = 0; j < l; j++) {
 			const float W0_re = cosf(-2 * PI * j / (3 * l));
 			const float W0_im = sinf(-2 * PI * j / (3 * l));
 			const float W1_re = cosf(-2 * PI * 2 * j / (3 * l));
@@ -138,11 +138,11 @@ void fft_stockham_radix3(float * in_re, float * in_im, float *out_re, float *out
 				out2_im = FMA(d4_re, W1_im, + d4_im * W1_re);
 
 				out_re[k + 3 * j * m] = out0_re;
-                out_im[k + 3 * j * m] = out0_im;
-                out_re[k + 3 * j * m + m] = out1_re;
-                out_im[k + 3 * j * m + m] = out1_im;
-                out_re[k + 3 * j * m + 2 * m] = out2_re;
-                out_im[k + 3 * j * m + 2 * m] = out2_im;
+				out_im[k + 3 * j * m] = out0_im;
+				out_re[k + 3 * j * m + m] = out1_re;
+				out_im[k + 3 * j * m + m] = out1_im;
+				out_re[k + 3 * j * m + 2 * m] = out2_re;
+				out_im[k + 3 * j * m + 2 * m] = out2_im;
 
 			}
 		}
@@ -165,7 +165,7 @@ void fft_stockham_radix4(float * in_re, float * in_im, float *out_re, float *out
 	#pragma omp target enter data map(alloc:in_re[0:N], in_im[0:N], out_re[0:N], out_im[0:N])
 	#pragma omp target update to(in_re[0:N], in_im[0:N])
 	for (i = 0; i < LOG_N; i++) {
-        for (j = 0; j < l; j++) {
+		for (j = 0; j < l; j++) {
 			const float W0_re = cosf(-2 * PI * j / (4 * l));
 			const float W0_im = sinf(-2 * PI * j / (4 * l));
 			const float W1_re = cosf(-2 * PI * 2 * j / (4 * l));
@@ -217,13 +217,13 @@ void fft_stockham_radix4(float * in_re, float * in_im, float *out_re, float *out
 				out3_im = FMA(d6_re, W2_im, + d6_im * W2_re);
 
 				out_re[k + 4 * j * m] = out0_re;
-                out_im[k + 4 * j * m] = out0_im;
-                out_re[k + 4 * j * m + m] = out1_re;
-                out_im[k + 4 * j * m + m] = out1_im;
-                out_re[k + 4 * j * m + 2 * m] = out2_re;
-                out_im[k + 4 * j * m + 2 * m] = out2_im;
-                out_re[k + 4 * j * m + 3 * m] = out3_re;
-                out_im[k + 4 * j * m + 3 * m] = out3_im;
+				out_im[k + 4 * j * m] = out0_im;
+				out_re[k + 4 * j * m + m] = out1_re;
+				out_im[k + 4 * j * m + m] = out1_im;
+				out_re[k + 4 * j * m + 2 * m] = out2_re;
+				out_im[k + 4 * j * m + 2 * m] = out2_im;
+				out_re[k + 4 * j * m + 3 * m] = out3_re;
+				out_im[k + 4 * j * m + 3 * m] = out3_im;
 			}
 		}
 		l /= 4;
@@ -246,7 +246,7 @@ void fft_stockham_radix5(float * in_re, float * in_im, float *out_re, float *out
 	#pragma omp target update to(in_re[0:N], in_im[0:N])
 
 	for (i = 0; i < LOG_N; i++) {
-        for (j = 0; j < l; j++) {
+		for (j = 0; j < l; j++) {
 			const float W0_re = cosf(-2 * PI * j / (5 * l));
 			const float W0_im = sinf(-2 * PI * j / (5 * l));
 			const float W1_re = cosf(-2 * PI * 2 * j / (5 * l));
@@ -329,15 +329,15 @@ void fft_stockham_radix5(float * in_re, float * in_im, float *out_re, float *out
 				out4_im = FMA(d14_re, W3_im, + d14_im * W3_re);
 
 				out_re[k + 5 * j * m] = out0_re;
-                out_im[k + 5 * j * m] = out0_im;
-                out_re[k + 5 * j * m + m] = out1_re;
-                out_im[k + 5 * j * m + m] = out1_im;
-                out_re[k + 5 * j * m + 2 * m] = out2_re;
-                out_im[k + 5 * j * m + 2 * m] = out2_im;
-                out_re[k + 5 * j * m + 3 * m] = out3_re;
-                out_im[k + 5 * j * m + 3 * m] = out3_im;
-                out_re[k + 5 * j * m + 4 * m] = out4_re;
-                out_im[k + 5 * j * m + 4 * m] = out4_im;
+				out_im[k + 5 * j * m] = out0_im;
+				out_re[k + 5 * j * m + m] = out1_re;
+				out_im[k + 5 * j * m + m] = out1_im;
+				out_re[k + 5 * j * m + 2 * m] = out2_re;
+				out_im[k + 5 * j * m + 2 * m] = out2_im;
+				out_re[k + 5 * j * m + 3 * m] = out3_re;
+				out_im[k + 5 * j * m + 3 * m] = out3_im;
+				out_re[k + 5 * j * m + 4 * m] = out4_re;
+				out_im[k + 5 * j * m + 4 * m] = out4_im;
 			}
 		}
 		l /= 5;

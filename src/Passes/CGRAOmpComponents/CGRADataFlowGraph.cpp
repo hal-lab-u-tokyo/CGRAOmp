@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  27-08-2021 15:03:59
-*    Last Modified: 17-07-2022 20:07:57
+*    Last Modified: 20-07-2022 13:19:55
 */
 
 #include "llvm/Support/FileSystem.h"
@@ -84,7 +84,7 @@ string GlobalDataNode::getDataStr() const
  {
 	Value* data_src = (skip_seq) ? skip_seq->back() : val;
 	auto type_str = getTypeName(data_src->getType());
-	return formatv("datatype={0},value={1}", type_str, data_src->getNameOrAsOperand());
+	return formatv("datatype=\"{0}\",value=\"{1}\"", type_str, data_src->getNameOrAsOperand());
 }
 
 string GlobalDataNode::getNodeAttr() const {

@@ -21,21 +21,17 @@
 *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *    SOFTWARE.
 *    
-*    File:          /build/CGRAOmp_build/test/simple_memdep.c
+*    File:          /share/samples/simple_memdep/simple_memdep.c
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  08-09-2021 14:17:51
-*    Last Modified: 19-02-2022 05:56:42
+*    Last Modified: 20-07-2022 14:33:45
 */
 #include <stdio.h>
-#include <omp.h>
-#include <math.h>
-
-#define CGRAOMP_CUSTOM_INST_INLINE __attribute__((annotate("cgra_custom_inst")))  inline static
-#define CGRAOMP_CUSTOM_INST __attribute__((annotate("cgra_custom_inst"))) 
+#include <cgraomp.h>
 
 CGRAOMP_CUSTOM_INST_INLINE double fsin(double x) {
-  return sin(x);
+	return sin(x);
 }
 
 #define N 1024
@@ -43,20 +39,20 @@ CGRAOMP_CUSTOM_INST_INLINE double fsin(double x) {
 
 int main(int argc, char* argv[])
 {
-  int A[N];
-  int B[N];
-  const int c = 1;
-  int64_t i, j;
-  int *x;
-  *x = argc;
+	int A[N];
+	int B[N];
+	const int c = 1;
+	int64_t i, j;
+	int *x;
+	*x = argc;
 
-  #pragma omp target parallel for map(to:A) map(from:B)
-  for (i = DEP_N; i < N; i += 1) {
-	B[i] = A[i] + B[i - DEP_N];
-  }
+	#pragma omp target parallel for map(to:A) map(from:B)
+	for (i = DEP_N; i < N; i += 1) {
+		B[i] = A[i] + B[i - DEP_N];
+	}
 
-  printf("%d\n", B[argc]);
+	printf("%d\n", B[argc]);
 
-  return 0;
+	return 0;
 
 }

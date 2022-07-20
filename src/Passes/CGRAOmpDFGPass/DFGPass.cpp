@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  15-12-2021 10:40:31
-*    Last Modified: 17-07-2022 20:34:16
+*    Last Modified: 20-07-2022 13:17:28
 */
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -66,6 +66,11 @@ using namespace CGRAOmp::Utils;
 #define DEBUG_TYPE "cgraomp"
 
 static const char *VerboseDebug = DEBUG_TYPE "-verbose";
+
+char GEP_ADD_OPCODE[] = "add";
+char GEP_MULT_OPCODE[] = "mul";
+using GEPAddNode = GEPNode<GEP_ADD_OPCODE>;
+using GEPMultNode = GEPNode<GEP_MULT_OPCODE>;
 
 
 DFGPassBuilder::DFGPassBuilder()
@@ -435,6 +440,15 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	DenseMap<PHINode*, LoopDependency*> idv_phis, lc_dep_phis;
 	SmallPtrSet<BasicBlock*, 32> all_blocks(L.block_begin(), L.block_end());
 	SmallPtrSet<GetElementPtrInst*, 32> gep_set;
+	SmallPtrSet<DFGNode*, 16> gep_add_nodes;
+
+	// ID maker based on pointer
+	SmallVector<int*> unique_id;
+	auto make_unique_id = [&]() {
+		int* new_id = new int(0);
+		unique_id.emplace_back(new_id);
+		return (int)((uintptr_t)(new_id));
+	};
 
 	// to check whether the node exists or not
 	auto is_node_exist = [&](Value *V) {
@@ -615,18 +629,22 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 	// Note: it assumes continuous memory allocation for multidimensional array 
 	for (auto gep : gep_set) {
 		auto ptr = gep->getPointerOperand();
-		auto sizes = getArrayElementSizes(gep->getSourceElementType());
+		Type *element_type;
+		SmallVector<int> sizes;
+		getArrayElementSizes(gep->getSourceElementType(), sizes, element_type);
+		int  bytes = 0;
+		if (sizes.size() > 0) {
+			bytes = Utils::getDataWidth(element_type) >> 3;
+		}
 		SmallVector<int> inc;
-		errs() << formatv("sizes {0}\n", make_range(sizes.begin(), sizes.end()));
 		for (auto i = sizes.rbegin(); i != sizes.rend(); i++) {
 			int total = 1;
 			for (auto j = sizes.rbegin(); j <= i; j++) {
 				total *= *j;
 			}
-			inc.insert(inc.begin(), total);
+			inc.insert(inc.begin(), total * bytes);
 		}
-		inc.emplace_back(1);
-		errs() << formatv("inc {0}\n", make_range(inc.begin(), inc.end()));
+		inc.emplace_back(bytes);
 
 		DFGNode *base_addr;
 		if (!is_node_exist(ptr)) {
@@ -637,19 +655,35 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 			base_addr = value_to_node[ptr];
 		}
 
+		// find induction variable
 		int i = 0;
 		DFGNode* last = nullptr;
 		for (auto idx = gep->idx_begin(); idx != gep->idx_end(); idx++, i++) {
 			if (auto inst_indice = dyn_cast<Instruction>(idx)) {
 				if (all_blocks.contains(inst_indice->getParent())) {
 					auto indice_node = value_to_node[inst_indice];
-					DFGNode* add = new GEPAddNode(gep);
+					auto stride = inc[i];
+					// add node
+					DFGNode* add = new GEPAddNode(gep, make_unique_id());
 					add = G->addNode(*add);
 					DFGEdge* NewEdge = new DFGEdge(*add);
-					assert(G->connect(*indice_node, *add, *NewEdge) && "Trying to connect non-exist nodes");
+					if (stride > 1) {
+						DFGNode* mult = new GEPMultNode(gep, make_unique_id());
+						mult = G->addNode(*mult);
+						DFGNode* stride_node = new GEPConstantNode(gep, make_unique_id(), stride);
+						stride_node = G->addNode(*stride_node);
+						DFGEdge *MultEdge_a = new DFGEdge(*mult);
+						DFGEdge *MultEdge_b = new DFGEdge(*mult);
+						assert(G->connect(*indice_node, *mult, *MultEdge_a) && "Trying to connect non-exist nodes");
+						assert(G->connect(*stride_node, *mult, *MultEdge_b) && "Trying to connect non-exist nodes");
+						assert(G->connect(*mult, *add, *NewEdge) && "Trying to connect non-exist nodes");
+					} else {
+						assert(G->connect(*indice_node, *add, *NewEdge) && "Trying to connect non-exist nodes");
+					}		
 					NewEdge = new DFGEdge(*add);
-					assert(G->connect(*base_addr, *add, *NewEdge) && "Trying to connect non-exist nodes");
+					assert(G->connect(last ? *last : *base_addr , *add, *NewEdge) && "Trying to connect non-exist nodes");
 					last = add;
+					gep_add_nodes.insert(add);
 				}
 			}
 		}
@@ -690,7 +724,9 @@ void DFGPassHandler::createDataFlowGraph(Function &F, Loop &L, FunctionAnalysisM
 		}
 	}
 
-
+	for (auto id : unique_id) {
+		delete id;
+	}
 
 	addGraph(G);
 }

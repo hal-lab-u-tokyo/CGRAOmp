@@ -25,7 +25,7 @@
 #    Project:       CGRAOmp
 #    Author:        Takuya Kojima in Amano Laboratory, Keio University (tkojima@am.ics.keio.ac.jp)
 #    Created Date:  18-01-2022 19:50:06
-#    Last Modified: 01-02-2022 20:05:03
+#    Last Modified: 20-07-2022 14:52:13
 #
 name: Release
 
@@ -64,5 +64,5 @@ jobs:
       - name: deploy release docs
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.DOCS_DEPLOY_TOKEN }}
           publish_dir: ./install/share/docs/doxygen-html/html

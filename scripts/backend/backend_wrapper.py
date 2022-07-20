@@ -28,7 +28,7 @@
 #   Project:       CGRAOmp
 #   Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 #   Created Date:  18-06-2022 21:03:38
-#   Last Modified: 30-06-2022 13:38:38
+#   Last Modified: 20-07-2022 15:37:09
 ###
 
 try:
@@ -57,15 +57,15 @@ cursor_up_finder = re.compile(r'\x1B\[A')
 
 from .decorder import decode
 
-def backend_wrapper(files, cmd, panel_num, proc_num, nowait):
+def backend_wrapper(files, cmd, panel_num, proc_num, nowait, no_rich):
     jobs = []
     for f in files:
         jobs.append(BackendJob(f, cmd))
-    if rich_available:
+    if rich_available and not no_rich:
         runner = RichRunner(panel_num, jobs, proc_num, nowait)
-        runner.run()
     else:
-        pass
+        runner = SimpleRunner(jobs, proc_num, nowait)
+    runner.run()
 
 
 class Header:
@@ -128,7 +128,7 @@ class BackendJob():
 
     def is_running(self) -> bool:
         return self.started and not self.finished
-
+        
     def update(self):
         """Update stdout buffer and check the process status"""
         if self.proc is not None:
@@ -188,27 +188,6 @@ class BackendJob():
         except IOError as e:
             pass
         return rdata
-
-            
-    # def __decode(self) -> List[str]:
-    #     """decode buffered bytes to string"""
-    #     lines = []
-    #     prev = 0
-    #     for i in range(len(self.buf)):
-    #         c = self.buf[i]
-
-    #         if c == b'\n'[0]:
-    #             lines.append(self.buf[prev:i].decode())
-    #             prev = i + 1
-    #         elif c == b'\r'[0]:
-    #             prev = i + 1
-
-    #     if prev < len(self.buf):
-    #         lines.append(self.buf[prev:].decode())
-
-    #     escape_lines = [escape_finder.sub('', l) for l in lines]
-
-    #     return escape_lines
 
 
 class StatusPanel():
@@ -312,8 +291,7 @@ class RichRunner():
         start = 0
         running : List[BackendJob] = []
         with Live(self.layout, refresh_per_second=10, screen=True):
-            count = 100000
-            while count > 0:
+            while True:
                 # job queue control
                 dispatch_count = min(self.num_proc - len(running),  len(self.job_queue))
                 for i in range(dispatch_count):
@@ -351,12 +329,55 @@ class RichRunner():
 
                 running = [job for job in running if job.is_running()]
                 
-                count -= 1
                 sleep(0.1)
 
             if not self.nowait:
                 input()
 
-class PlainRunner():
-    pass
+class SimpleRunner():
+    def __init__(self, jobs : List[BackendJob], num_proc, nowait = False):
+        self.num_proc = min(num_proc, len(jobs))
+        self.jobs = jobs
+        self.job_queue = [j for j in self.jobs]
+        self.nowait = nowait
 
+    def run(self):
+        print("Start backend process")
+
+        running : List[BackendJob] = []
+        prev_line_count = dict()
+
+        while True:
+            dispatch_count = min(self.num_proc - len(running),  len(self.job_queue))
+            for i in range(dispatch_count):
+                job = self.job_queue[i]
+                job.run()
+                running.append(job)
+                prev_line_count[job] = 0
+                print("Job {0} (PID: {1}) started".format(job.jobName(), job.getPID()))
+
+            self.job_queue = self.job_queue[dispatch_count:]
+
+            # status update
+            for job in running:
+                job.update()
+                lines = job.readlines()
+                new_lines = lines[prev_line_count[job]:]
+                if len(new_lines) > 0:
+                    msg = "".join(new_lines)
+                    print("[Jobs {0}]:\t{1}".format(self.jobs.index(job), msg))
+                    prev_line_count[job] = len(lines)
+                
+            # check finished jobs
+            for job in running:
+                if (job.is_finished()):
+                    print("job {0} finished with exit code {1}".format(\
+                        job.jobName(), job.getReturnCode()))
+            running = [job for job in running if job.is_running()]
+            if sum([j.is_finished() for j in self.jobs]) == len(self.jobs):
+                break
+
+            sleep(0.1)
+
+        if not self.nowait:
+            input("All jobs finished. Please enter any key")

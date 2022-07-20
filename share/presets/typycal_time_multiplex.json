@@ -1,0 +1,18 @@
+{
+	"category": "time-multiplexed",
+	"conditional" : {
+		"allowed": false
+	},
+	"inter-loop-dependency": {
+		"allowed": false
+	},
+	"custom_instructions": [ "" ],
+	"generic_instructions": [
+		"add", "sub", "mul", "udiv", "sdiv", "and", "or", "xor", "shl",
+		"fadd", "fmul", "fsub",
+		"load", "store"
+	],
+	"instruction_map": [
+
+	]
+}

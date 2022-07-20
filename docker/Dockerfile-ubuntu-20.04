@@ -1,0 +1,22 @@
+from tkojima0107/llvm12-ubuntu-20.04
+
+LABEL maintainer="Takuya Kojima <tkojima@hal.ipc.i.u-tokyo.ac.jp>"
+
+RUN git clone https://github.com/hal-lab-u-tokyo/CGRAOmp.git \
+	&& mkdir -p CGRAOmp/build \
+	&& cd CGRAOmp/build \
+	&& cmake -DCMAKE_INSTALL_PREFIX=/opt/cgraomp/ .. \
+	&& make -j`nproc` \
+	&& make install
+RUN apt-get update -y && apt-get install -y graphviz python3-pip
+RUN pip3 install rich watchdog graphviz
+
+RUN echo "/opt/cgraomp/lib" | tee /etc/ld.so.conf.d/10-cgraomp.conf
+RUN ldconfig
+
+ENV PATH /opt/cgraomp/bin:$PATH
+
+CMD ["/bin/bash", "--login"]
+
+
+

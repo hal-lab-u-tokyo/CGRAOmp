@@ -25,7 +25,7 @@
 *    Project:       CGRAOmp
 *    Author:        Takuya Kojima in The University of Tokyo (tkojima@hal.ipc.i.u-tokyo.ac.jp)
 *    Created Date:  27-08-2021 15:03:28
-*    Last Modified: 17-07-2022 20:25:55
+*    Last Modified: 20-07-2022 13:48:25
 */
 #ifndef CGRADataFlowGraph_H
 #define CGRADataFlowGraph_H
@@ -107,6 +107,7 @@ namespace llvm {
 			}
 
 			int getID() const { return ID; }
+			
 			Value* getValue() const { return val; }
 
 			virtual string getUniqueName() const = 0;
@@ -192,18 +193,20 @@ namespace llvm {
 		public:
 			MemAccessNode(LoadInst *load) : 
 					DFGNode(DFGNode::NodeKind::MemLoad, load) {
-				_isLoad = true;
+				is_load = true;
+				addr = load->getOperand(0);
 			}
 
 			MemAccessNode(StoreInst *store) :
 					DFGNode(DFGNode::NodeKind::MemStore, store) {
-				_isLoad = false;
+				is_load = false;
+				addr = store->getOperand(1);
 			}
 
-			inline bool isLoad() { return _isLoad;}
+			inline bool isLoad() { return is_load;}
 
 			string getUniqueName() const {
-				if (_isLoad) {
+				if (is_load) {
 					return  "Load_" + to_string(getID());
  				} else {
 					return  "Store_" + to_string(getID());
@@ -211,7 +214,7 @@ namespace llvm {
 			}
 			
 			string getNodeAttr() const {
-				string type = (_isLoad) ? "input" : "output";
+				string type = (is_load) ? "input" : "output";
 				return formatv("type={0},data={1}", type, getSymbol());
 			}
 
@@ -221,7 +224,7 @@ namespace llvm {
 			 * If a symbol is not found, it return "unknown"
 			 */
 			string getSymbol() const {
-				if (auto gep = dyn_cast<GetElementPtrInst>(val)) {
+				if (auto gep = dyn_cast<GetElementPtrInst>(addr)) {
 					auto *ptr = gep->getPointerOperand();
 					if (isa<Argument>(*ptr)) {
 						if (ptr->hasName()) {
@@ -248,7 +251,8 @@ namespace llvm {
 						N->getKind() == NodeKind::MemStore;
 			}
 		private:
-			bool _isLoad;
+			bool is_load;
+			Value *addr;
 	};
 
 	template <DFGNode::NodeKind DrivedKind>
@@ -263,6 +267,9 @@ namespace llvm {
 			DataNode(Value *v, SkipSeq* seq) : 
 				DFGNode(DrivedKind, v), skip_seq(seq) {};
 
+			DataNode(Value *v, SkipSeq* seq, int ID) : 
+				DFGNode(ID, DrivedKind, v), skip_seq(seq) {};
+
 
 		protected:
 
@@ -270,17 +277,18 @@ namespace llvm {
 				Type *ele_ty = ty;
 				string format_str = "{0}", type_str;
 
-				if (ty->isPointerTy()) {
+				while (ele_ty->isPointerTy()) {
 					ele_ty = ty->getPointerElementType();
-					format_str = "\"address<{0}>\"";
 				}
-				if (ele_ty->isArrayTy()) {
+				while (ele_ty->isArrayTy()) {
+					int size = dyn_cast<ArrayType>(ele_ty)->getArrayNumElements();
+					format_str += formatv("[{0}]", size);
 					ele_ty = ele_ty->getArrayElementType();
 				}
 
-				if (ele_ty->isIntegerTy()) {
+				if (ele_ty->isFloatingPointTy()) {
 					type_str = "float" + to_string(Utils::getDataWidth(ele_ty));
-				} else if (ele_ty->isFloatingPointTy()) {
+				} else if (ele_ty->isIntegerTy()) {
 					type_str = "int" + to_string(Utils::getDataWidth(ele_ty));
 				} else {
 					type_str = "unknown";
@@ -319,16 +327,23 @@ namespace llvm {
 			explicit ConstantNode(Value *v) :
 				ConstantNode(v, nullptr) {};
 
+			ConstantNode(Value *v, int ID) :
+				ConstantNode(v, nullptr, ID) {};
+
+
 			// constructor used if it has skipped nodes
 			ConstantNode(Value *v, SkipSeq* seq) : 
 				DataNode<DFGNode::NodeKind::Constant>(v, seq)  {};
 
+			ConstantNode(Value *v, SkipSeq* seq, int ID) : 
+				DataNode<DFGNode::NodeKind::Constant>(v, seq, ID)  {};
+
 			string getUniqueName() const {
 				return "Const_" + to_string(getID());
 			}
-			string getNodeAttr() const;
+			virtual string getNodeAttr() const;
 
-			string getExtraAttr() const {
+			virtual string getExtraAttr() const {
 				return getConstStr();
 			}
 			static bool classof(const DFGNode *N) {
@@ -365,11 +380,11 @@ namespace llvm {
 	};
 
 
-
-	class GEPAddNode : public DFGNode {
+	template<char const* OPCODE_STR>
+	class GEPNode : public DFGNode {
 		public:
-			GEPAddNode(GetElementPtrInst *gep) : 
-				DFGNode(DFGNode::NodeKind::Compute, gep), opcode("add") {}
+			GEPNode(GetElementPtrInst *gep, int ID) : 
+				DFGNode(ID, DFGNode::NodeKind::Compute, gep), opcode(OPCODE_STR) {}
 
 			string getUniqueName() const {
 				return opcode + "_" + to_string(getID());
@@ -387,18 +402,21 @@ namespace llvm {
 			std::string opcode;
 	};
 
-	class GEPMultNode : public DFGNode {
+	class GEPConstantNode : public ConstantNode {
 		public:
-			
+			explicit GEPConstantNode(Value *v, int ID, int const_value) :
+				ConstantNode(v, ID), const_value(const_value) {};
+
+			virtual string getExtraAttr() const {
+				return formatv("datatype=int,value={0}", const_value);
+			}
+			virtual string getNodeAttr() const {
+				return formatv("type=const,{0}", getExtraAttr());
+			}
+
 		private:
-
+			int const_value;
 	};
-
-	// class GEPPtrNode : public GlobalDataNode {
-	// 	public:
-	// 		explicit GEPPtrNode(Value* V) : GlobalDataNode(V) {};
-	// 	private:
-	// };
 
 
 	/**
@@ -407,7 +425,14 @@ namespace llvm {
 	*/
 	class DFGEdge : public DFGEdgeBase {
 		public:
-			DFGEdge(DFGNode &N, int operand = 0) : DFGEdgeBase(N), operand(operand) {}
+			enum class EdgeKind {
+				Normal,
+				LoopCarried,
+				Init
+			};
+			DFGEdge(DFGNode &N, int operand = 0, EdgeKind Kind = EdgeKind::Normal) 
+				: DFGEdgeBase(N), operand(operand), Kind(Kind) {}
+				
 			DFGEdge(const DFGEdge &E) : DFGEdgeBase(E) {
 				*this = E;
 			};
@@ -428,20 +453,29 @@ namespace llvm {
 			virtual string getEdgeAttr() const {
 				return formatv("operand={0}", operand);
 			}
+
+			EdgeKind getKind() const { return Kind; }
+			
 		protected:
 			int operand;
+			EdgeKind Kind;
 	};
 
 	class LoopDependencyEdge : public DFGEdge {
 		public:
 			LoopDependencyEdge(DFGNode &N, int operand, int distance) :
-				DFGEdge(N, operand), distance(distance) {}
+				DFGEdge(N, operand, EdgeKind::LoopCarried), distance(distance) {}
 
 
 			virtual string getEdgeAttr() const {
 				// add distance info
 				return formatv("operand={0},dir=back,distance={1},label={1}", operand ,distance);
 			}
+
+			static bool classof(const DFGEdge* E) {
+				return E->getKind() == EdgeKind::LoopCarried;
+			}
+
 		private:
 			int distance;
 	};
@@ -449,10 +483,14 @@ namespace llvm {
 	class InitDataEdge : public DFGEdge {
 		public:
 			InitDataEdge(DFGNode &N, int operand) :
-				DFGEdge(N, operand) {}
+				DFGEdge(N, operand, EdgeKind::Init) {}
 
 			virtual string getEdgeAttr() const {
 				return formatv("operand={0},type=init,label=init", operand);
+			}
+
+			static bool classof(const DFGEdge* E) {
+				return E->getKind() == EdgeKind::Init;
 			}
 		private:
 
