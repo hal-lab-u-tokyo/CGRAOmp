@@ -81,7 +81,7 @@ void kernel() {
     const int a = 3;
 
     #pragma omp target parallel for map(to:X[0:N],Y[0:N]) map(from:Z[0:N])
-    for (int i = 0; i < N; i++) {
+    for (int64_t i = 0; i < N; i++) {
         Z[i] = X[i] * a + Y[i];
     }
 }
