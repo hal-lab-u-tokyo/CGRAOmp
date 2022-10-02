@@ -74,13 +74,16 @@ This repository includes the following types in [share/presents](share/presets/)
 
 ## Sample code (vec_madd.c)
 ```
+#include <cgraomp.h>
 #define N 100
-int X[N], Y[N], Z[N]
-const int a = 3;
+void kernel() {
+    int X[N], Y[N], Z[N];
+    const int a = 3;
 
-#pragma omp target parallel for map(to:A[0:N],B[0:N]) map(from:C[0:N])
-for (int i = 0; i < N; i++) {
-	Z[i] = X[i] * a + Y[i];
+    #pragma omp target parallel for map(to:X[0:N],Y[0:N]) map(from:Z[0:N])
+    for (int64_t i = 0; i < N; i++) {
+        Z[i] = X[i] * a + Y[i];
+    }
 }
 ```
 ## Compilation commmad
