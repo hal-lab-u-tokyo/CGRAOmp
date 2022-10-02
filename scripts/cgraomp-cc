@@ -205,7 +205,9 @@ def parseCGRAOmpArgs(args):
     # look up the specified libs
     if not args.load_dfg_pass_plugin is None:
         search_path = [Path(".")]
-        search_path.extend([Path(p) for p in os.environ.get("LD_LIBRARY_PATH").strip(":").split(":")])
+        env_libpath = os.environ.get("LD_LIBRARY_PATH")
+        if env_libpath is not None:
+            search_path.extend([Path(p) for p in env_libpath.strip(":").split(":")])
         search_path.append(Path(default_libdir))
         path_to_lib = None
         for plugin in args.load_dfg_pass_plugin:
